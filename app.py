@@ -12,17 +12,20 @@ st.set_page_config(
 st.title("🎓 華語密集培訓：Moodle 多語系自適應題庫與 Log 分析系統")
 st.markdown("請依序完成 **STEP 1** 與 **STEP 2**，最後至 **STEP 3 一鍵匯出完整 GIFT 檔**。")
 
-# 動態計算當前日期字串 (格式：公元年月日禮拜幾)
-weekday_dict = {0: "週一", 1: "週二", 2: "週三", 3: "週四", 4: "週五", 5: "週六", 6: "週日"}
-now = datetime.now()
-date_str = now.strftime("%Y%m%d") + weekday_dict[now.weekday()]
-export_filename = f"{date_str}_詞彙記憶_Moodle題庫.txt"
-
-# 側邊欄設定
+# 側邊欄設定：完全依賴使用者自訂之分類與單元名稱
 st.sidebar.header("⚙️ 系統與教學參數")
-category_name = st.sidebar.text_input("Moodle 題庫目錄名稱", value=f"{date_str}_W01D1_密集浸潤特訓")
+custom_category = st.sidebar.text_input(
+    "Moodle 題庫分類名稱 (與檔名同步)", 
+    value="1151甲班-明間-詞彙", 
+    key="custom_category_key"
+)
 enable_tts_listening = st.sidebar.checkbox("啟用全自動 TTS 聽力辨識題區塊", value=True)
 enable_adaptive = st.sidebar.checkbox("啟用個人化弱點動態題庫生成", value=True)
+
+clean_category_name = custom_category.strip()
+export_filename = f"{clean_category_name}_Moodle題庫.txt"
+
+st.sidebar.info(f"📁 Moodle 題庫將直接建立分類：\n**`{clean_category_name}`**")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 單日生詞總量配比建議")
@@ -127,21 +130,11 @@ with tab2:
     st.info("💡 個人弱點確認完成！請切換至【STEP 3: 統一打包匯出 (GIFT)】下載最終檔案。")
 
 # =====================================================
-# TAB 3: 統一打包匯出 (GIFT) - 強制防呆綁定日期
+# TAB 3: 統一打包匯出 (GIFT) - 完全自訂分類路徑
 # =====================================================
 def generate_gift_content():
-    # 取得當前年月日與星期
-    current_date = datetime.now()
-    current_date_str = current_date.strftime("%Y%m%d") + weekday_dict[current_date.weekday()]
-    
-    # 強制防呆：若目錄名未包含當日日期，一律由後端自動補上
-    raw_name = category_name.strip()
-    if not raw_name.startswith(current_date_str):
-        full_unit_name = f"{current_date_str}_{raw_name}"
-    else:
-        full_unit_name = raw_name
-
-    category_base = f"$course$/01_每日詞彙特訓/{full_unit_name}"
+    # 直接以您自訂的名稱作為 Moodle 分類
+    category_base = f"$course$/{clean_category_name}"
     gift_lines = [f"$CATEGORY: {category_base}\n\n"]
     
     w_text = st.session_state['words_input_state']
@@ -165,14 +158,14 @@ def generate_gift_content():
     gift_lines.append(f"// ==================================================\n")
     gift_lines.append(f"// 第一大題：生詞與意涵直讀配對 (形義直讀 / 低認知負荷)\n")
     gift_lines.append(f"// ==================================================\n")
-    gift_lines.append(f"::{full_unit_name}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
+    gift_lines.append(f"::{clean_category_name}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
     for w, info in word_info.items():
         meaning = info['trans'] if info['trans'] else info['pinyin']
         gift_lines.append(f"  ={w} -> {meaning}\n")
     gift_lines.append("}\n\n")
 
     # ----------------------------------------------------
-    # 第二大題：全自動 TTS 聽力辨識區 (雲端音訊串流，跨裝置免裝語音包)
+    # 第二大題：全自動 TTS 聽力辨識區 (雲端音訊串流)
     # ----------------------------------------------------
     if enable_tts_listening and word_list:
         gift_lines.append(f"// ==================================================\n")
@@ -186,14 +179,14 @@ def generate_gift_content():
             tts_js = f"var a=new Audio('{tts_url}');a.play().catch(function(){{var u=new SpeechSynthesisUtterance('{w}');u.lang='zh-TW';window.speechSynthesis.speak(u);}});"
             tts_button_html = f"<button type='button' style='font-size:16px; padding:10px 18px; background-color:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;' onclick=\"{tts_js}\">🔊 點我聽華語發音</button>"
             
-            gift_lines.append(f"::{full_unit_name}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
+            gift_lines.append(f"::{clean_category_name}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
             gift_lines.append(f"  ={w}\n")
             for d in distractor_choices:
                 gift_lines.append(f"  ~{d}\n")
             gift_lines.append("}\n\n")
 
     # ----------------------------------------------------
-    # 第三大題：句子理解與繁體字手寫區 (語境產出：讀句子 ➔ 手寫填空)
+    # 第三大題：句子理解與繁體字手寫區 (語境產出)
     # ----------------------------------------------------
     gift_lines.append(f"// ==================================================\n")
     gift_lines.append(f"// 第三大題：句子理解與繁體字寫作 (語境產出 / 產出式知識)\n")
@@ -210,11 +203,11 @@ def generate_gift_content():
                 hint_display = f" <span style='color:#666;'>（提示：{info['pinyin']} | {info['trans']}）</span>"
                 cloze_syntax = f"{{={w} ={w}的 #{hint_str}}}" + hint_display
                 formatted_sentence = s.replace(w, cloze_syntax)
-                gift_lines.append(f"::{full_unit_name}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
+                gift_lines.append(f"::{clean_category_name}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
                 q_idx += 1
 
     # ----------------------------------------------------
-    # 第四大題：個人化自適應弱點題區 (終極提取)
+    # 第四大題：個人化自適應弱點題區
     # ----------------------------------------------------
     if enable_adaptive and a_text.strip():
         gift_lines.append(f"// ==================================================\n")
@@ -232,7 +225,6 @@ def generate_gift_content():
 
 with tab3:
     st.subheader("🚀 STEP 3: 一鍵匯出完整 Moodle GIFT 題庫檔")
-    st.markdown("本檔案已依據**「形義直讀 ➔ 聽音辨字 (雲端串流) ➔ 語境手寫填空 ➔ 個人弱點」**順序完成打包！")
     
     gift_result = generate_gift_content()
     
@@ -245,14 +237,15 @@ with tab3:
             mime="text/plain",
             type="primary"
         )
-        st.caption(f"✨ 當前匯出檔名將預設為：`{export_filename}`")
+        st.caption(f"✨ 匯出檔名與分類已同步為：`{export_filename}`")
 
     with col_prev:
-        with st.expander("👀 點此檢視打包後的完整 GIFT 內部結構 (請確認第 1 行是否已帶日期)"):
+        st.markdown(f"**確認 Moodle 匯入目錄：** `$course$/{clean_category_name}`")
+        with st.expander("👀 點此檢視打包後的完整 GIFT 內部結構"):
             st.code(gift_result, language="text")
 
 # =====================================================
-# TAB 4: 使用 SOP (精確對照台灣 Moodle 實機截圖動線)
+# TAB 4: 使用 SOP
 # =====================================================
 with tab4:
     st.subheader("📖 Moodle 題庫治理與測驗卷設定完整 SOP (對照實機動線)")
@@ -275,7 +268,7 @@ with tab4:
     1. **檔案格式**：點選 **「Gift 格式」** 🔘。
     2. **一般設定區（關鍵治理選項！）**：
        * **匯入類別**：選擇 **「課程預設值 (例如: 1142_PF000A的預設)」**。
-       * ⚠️ **從檔案中取得類別名稱**：**務必勾選 ☑️** (*勾選後，Moodle 會自動建立『01_每日詞彙特訓/日期_單元名稱』資料夾，不亂填預設庫！*)
+       * ⚠️ **從檔案中取得類別名稱**：**務必勾選 ☑️** (*勾選後，Moodle 會自動建立您自訂的資料夾分類！*)
        * ⚠️ **從檔案中取得處境**：**務必勾選 ☑️**。
        * **比對得分百分比**：選擇「若得分百分比沒列在上面，則顯示錯誤」。
        * **錯誤則停止**：選擇「是」。
@@ -309,7 +302,7 @@ with tab4:
     進到建立好的測驗卷 ➔ 點選 **「增加試題」** ➔ 點擊右側 **「新增」**，隨機排列不要選擇 ➔ 從題庫選題：
 
     1. **新增全班骨幹題**：
-       * 點擊 **「從題庫」** ➔ 找到剛才上傳的 `01_每日詞彙特訓/日期_單元名稱` 目錄檔案 ➔ 全選題目 ➔ 點擊「新增至測驗」。
+       * 點擊 **「從題庫」** ➔ 找到剛才上傳的 `自訂分類名稱` 目錄檔案 ➔ 全選題目 ➔ 點擊「新增至測驗」。
     2. **新增個人化自適應弱點題**：
        * 點擊 **「新增隨機題目 (a random question)」** ➔ 類別選擇 `個人弱點自適應庫` ➔ **務必勾選「也顯示下層類別的試題」☑️** ➔ 隨機數量設定為 `2` 題。
     """)
