@@ -131,7 +131,7 @@ with tab2:
 # TAB 3: 統一打包匯出 (GIFT) - 認知流排序
 # =====================================================
 def generate_gift_content():
-    category_base = f"$course$/01_每日詞彙特訓/{category_name}"
+    category_base = f"$course$/01_每日詞彙特訓/{date_str}_{category_name}"
     gift_lines = [f"$CATEGORY: {category_base}\n\n"]
     
     w_text = st.session_state['words_input_state']
