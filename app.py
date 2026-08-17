@@ -12,20 +12,20 @@ st.set_page_config(
 st.title("🎓 華語密集培訓：Moodle 多語系自適應題庫與 Log 分析系統")
 st.markdown("請依序完成 **STEP 1** 與 **STEP 2**，最後至 **STEP 3 一鍵匯出完整 GIFT 檔**。")
 
-# 側邊欄設定：完全依賴使用者自訂之分類與單元名稱
+# 側邊欄設定：全新 Session Key 避免快取殘留
 st.sidebar.header("⚙️ 系統與教學參數")
 custom_category = st.sidebar.text_input(
-    "Moodle 題庫分類名稱 (與檔名同步)", 
+    "Moodle 題庫目錄名稱", 
     value="1151甲班-明間-詞彙", 
-    key="custom_category_key"
+    key="moodle_custom_category_v4"
 )
 enable_tts_listening = st.sidebar.checkbox("啟用全自動 TTS 聽力辨識題區塊", value=True)
 enable_adaptive = st.sidebar.checkbox("啟用個人化弱點動態題庫生成", value=True)
 
-clean_category_name = custom_category.strip()
-export_filename = f"{clean_category_name}_Moodle題庫.txt"
+target_category_name = custom_category.strip()
+export_filename = f"{target_category_name}_Moodle題庫.txt"
 
-st.sidebar.info(f"📁 Moodle 題庫將直接建立分類：\n**`{clean_category_name}`**")
+st.sidebar.info(f"📁 Moodle 題庫將直接建立分類：\n**`{target_category_name}`**")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 單日生詞總量配比建議")
@@ -130,11 +130,12 @@ with tab2:
     st.info("💡 個人弱點確認完成！請切換至【STEP 3: 統一打包匯出 (GIFT)】下載最終檔案。")
 
 # =====================================================
-# TAB 3: 統一打包匯出 (GIFT) - 完全自訂分類路徑
+# TAB 3: 統一打包匯出 (GIFT) - 精確路徑映射
 # =====================================================
 def generate_gift_content():
-    # 直接以您自訂的名稱作為 Moodle 分類
-    category_base = f"$course$/{clean_category_name}"
+    # 直接抓取當前輸入框的值
+    current_cat = st.session_state.get('moodle_custom_category_v4', target_category_name).strip()
+    category_base = f"$course$/{current_cat}"
     gift_lines = [f"$CATEGORY: {category_base}\n\n"]
     
     w_text = st.session_state['words_input_state']
@@ -158,7 +159,7 @@ def generate_gift_content():
     gift_lines.append(f"// ==================================================\n")
     gift_lines.append(f"// 第一大題：生詞與意涵直讀配對 (形義直讀 / 低認知負荷)\n")
     gift_lines.append(f"// ==================================================\n")
-    gift_lines.append(f"::{clean_category_name}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
+    gift_lines.append(f"::{current_cat}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
     for w, info in word_info.items():
         meaning = info['trans'] if info['trans'] else info['pinyin']
         gift_lines.append(f"  ={w} -> {meaning}\n")
@@ -179,7 +180,7 @@ def generate_gift_content():
             tts_js = f"var a=new Audio('{tts_url}');a.play().catch(function(){{var u=new SpeechSynthesisUtterance('{w}');u.lang='zh-TW';window.speechSynthesis.speak(u);}});"
             tts_button_html = f"<button type='button' style='font-size:16px; padding:10px 18px; background-color:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;' onclick=\"{tts_js}\">🔊 點我聽華語發音</button>"
             
-            gift_lines.append(f"::{clean_category_name}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
+            gift_lines.append(f"::{current_cat}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
             gift_lines.append(f"  ={w}\n")
             for d in distractor_choices:
                 gift_lines.append(f"  ~{d}\n")
@@ -203,7 +204,7 @@ def generate_gift_content():
                 hint_display = f" <span style='color:#666;'>（提示：{info['pinyin']} | {info['trans']}）</span>"
                 cloze_syntax = f"{{={w} ={w}的 #{hint_str}}}" + hint_display
                 formatted_sentence = s.replace(w, cloze_syntax)
-                gift_lines.append(f"::{clean_category_name}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
+                gift_lines.append(f"::{current_cat}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
                 q_idx += 1
 
     # ----------------------------------------------------
@@ -227,20 +228,21 @@ with tab3:
     st.subheader("🚀 STEP 3: 一鍵匯出完整 Moodle GIFT 題庫檔")
     
     gift_result = generate_gift_content()
+    current_cat_display = st.session_state.get('moodle_custom_category_v4', target_category_name).strip()
     
     col_dl, col_prev = st.columns([1, 2])
     with col_dl:
         st.download_button(
             label="📥 一鍵下載完整 Moodle GIFT 題庫檔 (.txt)",
             data=gift_result.encode('utf-8'),
-            file_name=export_filename,
+            file_name=f"{current_cat_display}_Moodle題庫.txt",
             mime="text/plain",
             type="primary"
         )
-        st.caption(f"✨ 匯出檔名與分類已同步為：`{export_filename}`")
+        st.caption(f"✨ 當前匯出檔名：`{current_cat_display}_Moodle題庫.txt`")
 
     with col_prev:
-        st.markdown(f"**確認 Moodle 匯入目錄：** `$course$/{clean_category_name}`")
+        st.markdown(f"**確認 Moodle 題庫分類路徑：** `$course$/{current_cat_display}`")
         with st.expander("👀 點此檢視打包後的完整 GIFT 內部結構"):
             st.code(gift_result, language="text")
 
