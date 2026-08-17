@@ -18,7 +18,7 @@ st.sidebar.header("⚙️ 題庫分類與教學參數")
 default_today = datetime.now().strftime("%Y%m%d")
 quiz_date = st.sidebar.text_input("📅 日期戳記 (YYYYMMDD)", value=default_today)
 topic_tag = st.sidebar.text_input("🏷️ 測驗主題", value="詞彙")
-class_choice = st.sidebar.selectbox("👥 班別選擇", options=["甲", "乙", "甲班", "乙班"], index=0)
+class_choice = st.sidebar.selectbox("👥 班別選擇", options=["甲班", "乙班"], index=0)
 
 # 動態組裝分類名稱
 composed_cat_name = f"{quiz_date.strip()}_{topic_tag.strip()}_{class_choice}"
