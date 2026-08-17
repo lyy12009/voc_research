@@ -33,7 +33,7 @@ now = datetime.now()
 date_str = now.strftime("%Y%m%d") + weekday_dict[now.weekday()]
 export_filename = f"{date_str}_詞彙記憶_Moodle題庫.txt"
 
-# Session State 儲存跨頁資料 (已採用低認知負荷之示範詞彙)
+# Session State 儲存跨頁資料 (採用低認知負荷之示範詞彙)
 if 'words_input_state' not in st.session_state:
     st.session_state['words_input_state'] = (
         "浸潤,jìn rùn,深入體驗 (Tẩm nhuận / Immersion)\n"
@@ -52,7 +52,7 @@ if 'sentences_input_state' not in st.session_state:
 if 'adaptive_data' not in st.session_state:
     st.session_state['adaptive_data'] = "Student01,鞏固,變強固\nStudent02,浸潤,深入體驗"
 
-# 分頁頁籤：嚴格依循時間順序設計
+# 分頁頁籤：依循認知心理學時間順序設計
 tab1, tab2, tab3, tab4 = st.tabs([
     "📝 STEP 1: 全班骨幹題設定", 
     "🎯 STEP 2: 個人弱點題設定 (含 Log 解析)", 
@@ -128,10 +128,17 @@ with tab2:
     st.info("💡 個人弱點確認完成！請切換至【STEP 3: 統一打包匯出 (GIFT)】下載最終檔案。")
 
 # =====================================================
-# TAB 3: 統一打包匯出 (GIFT) - 認知流排序
+# TAB 3: 統一打包匯出 (GIFT) - 強制動態綁定日期分類
 # =====================================================
 def generate_gift_content():
-    category_base = f"$course$/01_每日詞彙特訓/{date_str}_{category_name}"
+    # 動態計算當前日期字串
+    weekday_dict = {0: "週一", 1: "週二", 2: "週三", 3: "週四", 4: "週五", 5: "週六", 6: "週日"}
+    current_date = datetime.now()
+    current_date_str = current_date.strftime("%Y%m%d") + weekday_dict[current_date.weekday()]
+    
+    # 完整單元名稱 (例如: 20260817週一_W01D1_密集浸潤特訓)
+    full_unit_name = f"{current_date_str}_{category_name}"
+    category_base = f"$course$/01_每日詞彙特訓/{full_unit_name}"
     gift_lines = [f"$CATEGORY: {category_base}\n\n"]
     
     w_text = st.session_state['words_input_state']
@@ -155,26 +162,28 @@ def generate_gift_content():
     gift_lines.append(f"// ==================================================\n")
     gift_lines.append(f"// 第一大題：生詞與意涵直讀配對 (形義直讀 / 低認知負荷)\n")
     gift_lines.append(f"// ==================================================\n")
-    gift_lines.append(f"::{category_name}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
+    gift_lines.append(f"::{full_unit_name}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
     for w, info in word_info.items():
         meaning = info['trans'] if info['trans'] else info['pinyin']
         gift_lines.append(f"  ={w} -> {meaning}\n")
     gift_lines.append("}\n\n")
 
     # ----------------------------------------------------
-    # 第二大題：全自動 TTS 聽力辨識區 (聽覺受身：聽發音 ➔ 選漢字)
+    # 第二大題：全自動 TTS 聽力辨識區 (雲端音訊串流，跨裝置免裝語音包)
     # ----------------------------------------------------
     if enable_tts_listening and word_list:
         gift_lines.append(f"// ==================================================\n")
-        gift_lines.append(f"// 第二大題：全自動 TTS 聽力語音辨識 (音形連結 / 雙重編碼)\n")
+        gift_lines.append(f"// 第二大題：全自動 TTS 聽力語音辨識 (音形連結 / 雲端串流高音質)\n")
         gift_lines.append(f"// ==================================================\n")
         for idx, w in enumerate(word_list, 1):
             distractors = [other for other in word_list if other != w]
             distractor_choices = distractors[:3] if len(distractors) >= 3 else distractors
             
-            tts_button_html = f"<button type='button' style='font-size:16px; padding:8px 15px; background-color:#4CAF50; color:white; border:none; border-radius:5px; cursor:pointer;' onclick=\"window.speechSynthesis.speak(new SpeechSynthesisUtterance('{w}'));\">🔊 點我聽華語發音</button>"
+            tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={w}&tl=zh-TW&client=tw-ob"
+            tts_js = f"var a=new Audio('{tts_url}');a.play().catch(function(){{var u=new SpeechSynthesisUtterance('{w}');u.lang='zh-TW';window.speechSynthesis.speak(u);}});"
+            tts_button_html = f"<button type='button' style='font-size:16px; padding:10px 18px; background-color:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;' onclick=\"{tts_js}\">🔊 點我聽華語發音</button>"
             
-            gift_lines.append(f"::{category_name}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
+            gift_lines.append(f"::{full_unit_name}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
             gift_lines.append(f"  ={w}\n")
             for d in distractor_choices:
                 gift_lines.append(f"  ~{d}\n")
@@ -195,11 +204,10 @@ def generate_gift_content():
                 hint_str = f"拼音: {info['pinyin']}"
                 if info['trans']: hint_str += f" | 釋義: {info['trans']}"
                 
-                # 顯性提示＋多重容錯語法 (=詞 =詞的)
                 hint_display = f" <span style='color:#666;'>（提示：{info['pinyin']} | {info['trans']}）</span>"
                 cloze_syntax = f"{{={w} ={w}的 #{hint_str}}}" + hint_display
                 formatted_sentence = s.replace(w, cloze_syntax)
-                gift_lines.append(f"::{category_name}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
+                gift_lines.append(f"::{full_unit_name}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
                 q_idx += 1
 
     # ----------------------------------------------------
@@ -221,7 +229,7 @@ def generate_gift_content():
 
 with tab3:
     st.subheader("🚀 STEP 3: 一鍵匯出完整 Moodle GIFT 題庫檔")
-    st.markdown("本檔案已依據**「形義直讀 ➔ 聽音辨字 ➔ 語境手寫填空 ➔ 個人弱點」**順序完成打包！")
+    st.markdown("本檔案已依據**「形義直讀 ➔ 聽音辨字 (雲端串流) ➔ 語境手寫填空 ➔ 個人弱點」**順序完成打包！")
     
     gift_result = generate_gift_content()
     
@@ -245,7 +253,7 @@ with tab3:
 # =====================================================
 with tab4:
     st.subheader("📖 Moodle 題庫治理與測驗卷設定完整 SOP (對照實機動線)")
-    st.markdown("本系統透過 GIFT 檔案內建之 `$CATEGORY` 標籤與 HTML5 TTS 語音按鈕，實現零成本自動化教學。")
+    st.markdown("本系統透過 GIFT 檔案內建之 `$CATEGORY` 標籤與雲端 TTS 音訊，實現跨國籍手機零安裝自動化發音。")
     
     st.markdown("---")
     
@@ -264,11 +272,11 @@ with tab4:
     1. **檔案格式**：點選 **「Gift 格式」** 🔘。
     2. **一般設定區（關鍵治理選項！）**：
        * **匯入類別**：選擇 **「課程預設值 (例如: 1142_PF000A的預設)」**。
-       * ⚠️ **從檔案中取得類別名稱**：**務必勾選 ☑️** (*勾選後，Moodle 會自動建立『01_每日詞彙特訓/目錄名稱』資料夾，不亂填預設庫！*)
+       * ⚠️ **從檔案中取得類別名稱**：**務必勾選 ☑️** (*勾選後，Moodle 會自動建立『01_每日詞彙特訓/日期_單元名稱』資料夾，不亂填預設庫！*)
        * ⚠️ **從檔案中取得處境**：**務必勾選 ☑️**。
        * **比對得分百分比**：選擇「若得分百分比沒列在上面，則顯示錯誤」。
        * **錯誤則停止**：選擇「是」。
-    3. **從檔案匯入試題**：將 STEP 3 下載的 `.txt` 檔（例如：`20260817週一_詞彙記憶_Moodle題庫.txt`）拖入虛線上傳框，點擊藍色 **「匯入」** 按鈕。
+    3. **從檔案匯入試題**：將 STEP 3 下載的 `.txt` 檔拖入虛線上傳框，點擊藍色 **「匯入」** 按鈕。
     """)
 
     st.markdown("---")
@@ -277,18 +285,19 @@ with tab4:
     st.markdown("""
     於課程頁面點擊「新增活動或資源」➔ 選擇「測驗 (Quiz)」，完成核心設定：
 
-    1. **成績 ➔ 允許作答次數**（關鍵！）：
-       * ⚠️ 將預設的 `1` 下拉改選為 **【無限】** ⚡（*允許學生反覆刷卷直到 100% 精熟*）。
+    1. **成績**（關鍵！）：
+       * ⚠️ **允許作答次數**：將預設的 `1` 下拉改選為 **【無限】** ⚡（*允許學生反覆刷卷直到 100% 精熟*）。
+       * **及格分數**：輸入 `100`（或 `80`）。
     2. **版面設計**：
        * **新頁面**：選擇 **「每1個試題」** (單題刷卡體驗)。
        * **導覽方式**：改為 **「順序的」** 🛑 (階梯式順序解鎖)。
     3. **試題的作答與計分方式**：
        * ⚠️ **試題如何作答與計分**：務必下拉選擇 **【可以多次嘗試】** ⚡（*在後台留下 Attempts 次數大數據！*）。
-       * 點擊「顯示較多選項...」➔ **每次嘗試以最後一次為基礎**：選擇 **「是」**。
+       * 點擊「顯示較少選項...」➔ **每次嘗試以最後一次為基礎**：選擇 **「是」**。
     4. **檢閱選項 (Review Options)**：
        * ⚠️ **「在作答過程中」欄位**：務必勾選 **☑️ 是否答對**、**☑️ 選項的回饋** 與 **☑️ 正確答案**。
-    5. **活動完成條件**：選擇「新增條件」，並勾選 ☑️ **「及格成績」**。前面的「成績」，及格成績可填 90。
-   """)
+    5. **活動完成條件**：選擇「新增條件」，並勾選 ☑️ **「及格成績」**。
+    """)
 
     st.markdown("---")
 
@@ -297,9 +306,7 @@ with tab4:
     進到建立好的測驗卷 ➔ 點選 **「增加試題」** ➔ 點擊右側 **「新增」**，隨機排列不要選擇 ➔ 從題庫選題：
 
     1. **新增全班骨幹題**：
-       * 點擊 **「從題庫」** ➔ 找到剛才上傳的 `01_每日詞彙特訓/目錄名稱` 目錄檔案 ➔ 全選題目 ➔ 點擊「新增至測驗」。
+       * 點擊 **「從題庫」** ➔ 找到剛才上傳的 `01_每日詞彙特訓/日期_單元名稱` 目錄檔案 ➔ 全選題目 ➔ 點擊「新增至測驗」。
     2. **新增個人化自適應弱點題**：
-       * 點擊 **「新增隨機題目 (a random question)」** ➔ 類別選擇 `個人弱點自適應庫` ➔ **務必勾選「也顯示下層類別的試題」☑️** ➔ 隨機數量設定為 `2` 題。    
-    3. ** 複製新試卷**：
-       * 測驗的設定有些複雜，為簡化設定，可以在 **「編輯模式」** ➔ 找到一行三點選項，找到 **複製 ** ➔ 取得複製後，修改測驗名稱，再修改題庫的內容。
+       * 點擊 **「新增隨機題目 (a random question)」** ➔ 類別選擇 `個人弱點自適應庫` ➔ **務必勾選「也顯示下層類別的試題」☑️** ➔ 隨機數量設定為 `2` 題。
     """)
