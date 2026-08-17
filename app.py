@@ -12,16 +12,15 @@ st.set_page_config(
 st.title("🎓 華語密集培訓：Moodle 多語系自適應題庫與 Log 分析系統")
 st.markdown("請依序完成 **STEP 1** 與 **STEP 2**，最後至 **STEP 3 一鍵匯出完整 GIFT 檔**。")
 
-# 動態產生當前日期字串 (格式：公元年月日禮拜幾)
+# 動態計算當前日期字串 (格式：公元年月日禮拜幾)
 weekday_dict = {0: "週一", 1: "週二", 2: "週三", 3: "週四", 4: "週五", 5: "週六", 6: "週日"}
 now = datetime.now()
 date_str = now.strftime("%Y%m%d") + weekday_dict[now.weekday()]
 export_filename = f"{date_str}_詞彙記憶_Moodle題庫.txt"
 
-# 側邊欄設定：預設值直接帶入「當日日期_單元名稱」
+# 側邊欄設定
 st.sidebar.header("⚙️ 系統與教學參數")
-default_category_value = f"{date_str}_W01D1_密集浸潤特訓"
-category_name = st.sidebar.text_input("Moodle 題庫目錄名稱", value=default_category_value)
+category_name = st.sidebar.text_input("Moodle 題庫目錄名稱", value=f"{date_str}_W01D1_密集浸潤特訓")
 enable_tts_listening = st.sidebar.checkbox("啟用全自動 TTS 聽力辨識題區塊", value=True)
 enable_adaptive = st.sidebar.checkbox("啟用個人化弱點動態題庫生成", value=True)
 
@@ -128,11 +127,21 @@ with tab2:
     st.info("💡 個人弱點確認完成！請切換至【STEP 3: 統一打包匯出 (GIFT)】下載最終檔案。")
 
 # =====================================================
-# TAB 3: 統一打包匯出 (GIFT)
+# TAB 3: 統一打包匯出 (GIFT) - 強制防呆綁定日期
 # =====================================================
 def generate_gift_content():
-    # 嚴格使用帶有日期的目錄名稱
-    category_base = f"$course$/01_每日詞彙特訓/{category_name}"
+    # 取得當前年月日與星期
+    current_date = datetime.now()
+    current_date_str = current_date.strftime("%Y%m%d") + weekday_dict[current_date.weekday()]
+    
+    # 強制防呆：若目錄名未包含當日日期，一律由後端自動補上
+    raw_name = category_name.strip()
+    if not raw_name.startswith(current_date_str):
+        full_unit_name = f"{current_date_str}_{raw_name}"
+    else:
+        full_unit_name = raw_name
+
+    category_base = f"$course$/01_每日詞彙特訓/{full_unit_name}"
     gift_lines = [f"$CATEGORY: {category_base}\n\n"]
     
     w_text = st.session_state['words_input_state']
@@ -156,7 +165,7 @@ def generate_gift_content():
     gift_lines.append(f"// ==================================================\n")
     gift_lines.append(f"// 第一大題：生詞與意涵直讀配對 (形義直讀 / 低認知負荷)\n")
     gift_lines.append(f"// ==================================================\n")
-    gift_lines.append(f"::{category_name}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
+    gift_lines.append(f"::{full_unit_name}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
     for w, info in word_info.items():
         meaning = info['trans'] if info['trans'] else info['pinyin']
         gift_lines.append(f"  ={w} -> {meaning}\n")
@@ -177,7 +186,7 @@ def generate_gift_content():
             tts_js = f"var a=new Audio('{tts_url}');a.play().catch(function(){{var u=new SpeechSynthesisUtterance('{w}');u.lang='zh-TW';window.speechSynthesis.speak(u);}});"
             tts_button_html = f"<button type='button' style='font-size:16px; padding:10px 18px; background-color:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;' onclick=\"{tts_js}\">🔊 點我聽華語發音</button>"
             
-            gift_lines.append(f"::{category_name}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
+            gift_lines.append(f"::{full_unit_name}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
             gift_lines.append(f"  ={w}\n")
             for d in distractor_choices:
                 gift_lines.append(f"  ~{d}\n")
@@ -198,11 +207,10 @@ def generate_gift_content():
                 hint_str = f"拼音: {info['pinyin']}"
                 if info['trans']: hint_str += f" | 釋義: {info['trans']}"
                 
-                # 顯性提示＋多重容錯語法
                 hint_display = f" <span style='color:#666;'>（提示：{info['pinyin']} | {info['trans']}）</span>"
                 cloze_syntax = f"{{={w} ={w}的 #{hint_str}}}" + hint_display
                 formatted_sentence = s.replace(w, cloze_syntax)
-                gift_lines.append(f"::{category_name}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
+                gift_lines.append(f"::{full_unit_name}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
                 q_idx += 1
 
     # ----------------------------------------------------
@@ -240,7 +248,7 @@ with tab3:
         st.caption(f"✨ 當前匯出檔名將預設為：`{export_filename}`")
 
     with col_prev:
-        with st.expander("👀 點此檢視打包後的完整 GIFT 內部結構"):
+        with st.expander("👀 點此檢視打包後的完整 GIFT 內部結構 (請確認第 1 行是否已帶日期)"):
             st.code(gift_result, language="text")
 
 # =====================================================
