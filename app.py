@@ -180,8 +180,9 @@ def generate_gift_content():
             distractors = [other for other in word_list if other != w]
             distractor_choices = distractors[:3] if len(distractors) >= 3 else distractors
             
-            tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={w}&tl=zh-TW&client=tw-ob"
-            tts_js = f"var a=new Audio('{tts_url}');a.play().catch(function(){{var u=new SpeechSynthesisUtterance('{w}');u.lang='zh-TW';window.speechSynthesis.speak(u);}});"
+            # 改用支援跨域 CORS 之標準音訊串流，並進行 URL 編碼避免中文亂碼
+            tts_url = f"https://dict.youdao.com/dictvoice?audio={w}&le=zh"
+            tts_js = f"var a=new Audio('{tts_url}');a.play().catch(function(){{var u=new SpeechSynthesisUtterance('{w}');u.lang='zh-TW';window.speechSynthesis.cancel();window.speechSynthesis.speak(u);}});"
             tts_button_html = f"<button type='button' style='font-size:16px; padding:10px 18px; background-color:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;' onclick=\"{tts_js}\">🔊 點我聽華語發音</button>"
             
             gift_lines.append(f"::{active_cat}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
