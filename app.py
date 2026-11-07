@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import urllib.parse
 
 # 頁面標題與佈局設定
 st.set_page_config(
@@ -35,9 +36,9 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 單日生詞總量配比建議")
 st.sidebar.info("""
 **每日建議容量：18 ~ 25 詞**
-* 🟢 **基本生詞** (正課進度)：10 ~ 12 詞
-* 🔵 **補充生詞** (主題/當堂)：3 ~ 5 詞
-* 🟠 **動態複習難詞** (舊詞)：5 ~ 8 詞
+- 🟢 **基本生詞** (正課進度)：10 ~ 12 詞
+- 🔵 **補充生詞** (主題/當堂)：3 ~ 5 詞
+- 🟠 **動態複習難詞** (舊詞)：5 ~ 8 詞
 """)
 
 # Session State 儲存跨頁資料
@@ -148,17 +149,23 @@ def generate_gift_content():
     
     word_info = {}
     word_list = []
+    seen = set() # 🟢 [修正 2] 加入去重複機制集合
+    
     for line in w_text.strip().split('\n'):
         if not line.strip(): continue
         parts = line.split(',')
         w = parts[0].strip()
+        
+        if w in seen: continue # 🟢 [修正 2] 遇到重複生詞直接跳過
+        seen.add(w)
+        
         py = parts[1].strip() if len(parts) >= 2 else ""
         trans = parts[2].strip() if len(parts) >= 3 else ""
         word_info[w] = {"pinyin": py, "trans": trans}
         word_list.append(w)
 
     # ----------------------------------------------------
-    # 第一大題：形義直讀配對區 (視覺受身：漢字 ➔ 釋義，剝離拼音)
+    # 第一大題：形義直讀配對區
     # ----------------------------------------------------
     gift_lines.append(f"// ==================================================\n")
     gift_lines.append(f"// 第一大題：生詞與意涵直讀配對 (形義直讀 / 低認知負荷)\n")
@@ -170,7 +177,7 @@ def generate_gift_content():
     gift_lines.append("}\n\n")
 
     # ----------------------------------------------------
-    # 第二大題：全自動 TTS 聽力辨識區 (雲端音訊串流，跨裝置免裝語音包)
+    # 第二大題：全自動 TTS 聽力辨識區 (使用 HTML5 音訊標籤)
     # ----------------------------------------------------
     if enable_tts_listening and word_list:
         gift_lines.append(f"// ==================================================\n")
@@ -180,19 +187,23 @@ def generate_gift_content():
             distractors = [other for other in word_list if other != w]
             distractor_choices = distractors[:3] if len(distractors) >= 3 else distractors
             
-            # 改用支援跨域 CORS 之標準音訊串流，並進行 URL 編碼避免中文亂碼
-            tts_url = f"https://dict.youdao.com/dictvoice?audio={w}&le=zh"
-            tts_js = f"var a=new Audio('{tts_url}');a.play().catch(function(){{var u=new SpeechSynthesisUtterance('{w}');u.lang='zh-TW';window.speechSynthesis.cancel();window.speechSynthesis.speak(u);}});"
-            tts_button_html = f"<button type='button' style='font-size:16px; padding:10px 18px; background-color:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;' onclick=\"{tts_js}\">🔊 點我聽華語發音</button>"
+            # 🟢 [修正 1 & 3] 
+            # 1. 將中文字進行 URL Encoding 確保 API 穩定存取
+            w_encoded = urllib.parse.quote(w)
+            tts_url = f"https://dict.youdao.com/dictvoice?audio={w_encoded}&le=zh"
             
-            gift_lines.append(f"::{active_cat}_SECTION2_聽力_{idx}:: 第二大題：請點擊按鈕聽發音，並選出正確的華語生詞：<br><br>{tts_button_html}<br><br>{{\n")
+            # 2. 改用最乾淨、Moodle 不會阻擋的原生 <audio> 標籤
+            audio_html = f"<audio controls src='{tts_url}'></audio>"
+            
+            # 3. 題幹前加上 [html] 宣告，並移除多餘的 JS 按鈕
+            gift_lines.append(f"::{active_cat}_SECTION2_聽力_{idx}:: [html]第二大題：請聽發音，並選出正確的華語生詞：<br><br>{audio_html}<br><br>{{\n")
             gift_lines.append(f"  ={w}\n")
             for d in distractor_choices:
                 gift_lines.append(f"  ~{d}\n")
             gift_lines.append("}\n\n")
 
     # ----------------------------------------------------
-    # 第三大題：句子理解與繁體字手寫區 (語境產出：讀句子 ➔ 手寫填空)
+    # 第三大題：句子理解與繁體字手寫區
     # ----------------------------------------------------
     gift_lines.append(f"// ==================================================\n")
     gift_lines.append(f"// 第三大題：句子理解與繁體字寫作 (語境產出 / 產出式知識)\n")
@@ -207,13 +218,15 @@ def generate_gift_content():
                 if info['trans']: hint_str += f" | 釋義: {info['trans']}"
                 
                 hint_display = f" <span style='color:#666;'>（提示：{info['pinyin']} | {info['trans']}）</span>"
+                
+                # 🟢 [修正 3] 確保只有用到的符號留下，且題幹前方加入 [html] 宣告
                 cloze_syntax = f"{{={w} ={w}的 #{hint_str}}}" + hint_display
                 formatted_sentence = s.replace(w, cloze_syntax)
-                gift_lines.append(f"::{active_cat}_SECTION3_填空_{q_idx}:: 第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
+                gift_lines.append(f"::{active_cat}_SECTION3_填空_{q_idx}:: [html]第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
                 q_idx += 1
 
     # ----------------------------------------------------
-    # 第四大題：個人化自適應弱點題區 (終極提取)
+    # 第四大題：個人化自適應弱點題區
     # ----------------------------------------------------
     if enable_adaptive and a_text.strip():
         gift_lines.append(f"// ==================================================\n")
@@ -223,9 +236,15 @@ def generate_gift_content():
             if not line.strip() or ',' not in line: continue
             parts = line.split(',')
             student_id, word = parts[0].strip(), parts[1].strip()
-            hint = parts[2].strip() if len(parts) > 2 else "弱點複習"
+            hint = parts[2].strip() if len(parts) > 2 else ""
+            
             gift_lines.append(f"$CATEGORY: {category_base}/個人弱點自適應庫/個人弱點_{student_id}\n")
-            gift_lines.append(f"::弱點複習_{word}:: [個人化弱點] 請寫出生詞：【 {{={word} #{hint}}} 】\n\n")
+            
+            # 🟢 [修正 3] 若沒有提示 (hint)，則不要加上 # 符號，避免出現空的回饋標籤
+            if hint:
+                gift_lines.append(f"::弱點複習_{word}:: [個人化弱點] 請寫出生詞：【 {{={word} #{hint}}} 】\n\n")
+            else:
+                gift_lines.append(f"::弱點複習_{word}:: [個人化弱點] 請寫出生詞：【 {{={word}}} 】\n\n")
 
     return "".join(gift_lines)
 
