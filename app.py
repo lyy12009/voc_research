@@ -7,12 +7,12 @@ import base64
 
 # 頁面標題與佈局設定
 st.set_page_config(
-    page_title="Moodle 多語系自適應題庫系統",
+    page_title="Moodle 生詞題庫生成系統",
     page_icon="🎓",
     layout="wide"
 )
 
-st.title("🎓 華語密集培訓：Moodle 多語系自適應題庫與 Log 分析系統")
+st.title("🎓 生詞題庫生成系統")
 st.markdown("請依序完成 **STEP 1** 與 **STEP 2**，最後至 **STEP 3 一鍵匯出完整 GIFT 檔**。")
 
 # 側邊欄設定
