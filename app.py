@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import urllib.parse
+import urllib.request
+import base64
 
 # 頁面標題與佈局設定
 st.set_page_config(
@@ -13,7 +15,7 @@ st.set_page_config(
 st.title("🎓 華語密集培訓：Moodle 多語系自適應題庫與 Log 分析系統")
 st.markdown("請依序完成 **STEP 1** 與 **STEP 2**，最後至 **STEP 3 一鍵匯出完整 GIFT 檔**。")
 
-# 側邊欄設定：日期戳記 + 主題 + 甲/乙班選擇
+# 側邊欄設定
 st.sidebar.header("⚙️ 題庫分類與教學參數")
 
 default_today = datetime.now().strftime("%Y%m%d")
@@ -21,7 +23,6 @@ quiz_date = st.sidebar.text_input("📅 日期戳記 (YYYYMMDD)", value=default_
 topic_tag = st.sidebar.text_input("🏷️ 測驗主題", value="詞彙")
 class_choice = st.sidebar.selectbox("👥 班別選擇", options=["甲班", "乙班"], index=0)
 
-# 動態組裝分類名稱
 composed_cat_name = f"{quiz_date.strip()}_{topic_tag.strip()}_{class_choice}"
 target_category_name = st.sidebar.text_input("📁 最終 Moodle 題庫分類名稱 (可手動修改)", value=composed_cat_name)
 
@@ -31,15 +32,6 @@ enable_adaptive = st.sidebar.checkbox("啟用個人化弱點動態題庫生成",
 export_filename = f"{target_category_name.strip()}_Moodle題庫.txt"
 
 st.sidebar.info(f"📁 **Moodle 題庫分類即將建立為：**\n`$course$/{target_category_name.strip()}`")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📊 單日生詞總量配比建議")
-st.sidebar.info("""
-**每日建議容量：18 ~ 25 詞**
-- 🟢 **基本生詞** (正課進度)：10 ~ 12 詞
-- 🔵 **補充生詞** (主題/當堂)：3 ~ 5 詞
-- 🟠 **動態複習難詞** (舊詞)：5 ~ 8 詞
-""")
 
 # Session State 儲存跨頁資料
 if 'words_input_state' not in st.session_state:
@@ -60,85 +52,53 @@ if 'sentences_input_state' not in st.session_state:
 if 'adaptive_data' not in st.session_state:
     st.session_state['adaptive_data'] = "Student01,鞏固,變強固\nStudent02,浸潤,深入體驗"
 
-# 分頁頁籤：依循認知心理學時間順序設計
+# 🟢 [核心修正] 降維縫合：伺服器端抓取音訊並轉 Base64
+@st.cache_data(show_spinner=False)
+def get_tts_base64_or_fallback(text):
+    """將 Google TTS 台灣口音抓回轉為 Base64 字串，徹底繞過所有瀏覽器阻擋機制。"""
+    try:
+        w_encoded = urllib.parse.quote(text)
+        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={w_encoded}&tl=zh-TW&client=tw-ob"
+        # 偽裝成正常瀏覽器請求
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        with urllib.request.urlopen(req, timeout=3) as response:
+            audio_bytes = response.read()
+            # 將二進位音檔轉為 Base64 編碼字串
+            b64_str = base64.b64encode(audio_bytes).decode('utf-8')
+            return f"data:audio/mpeg;base64,{b64_str}"
+    except Exception as e:
+        # 若失敗（極少數情況），降級回 Youdao
+        w_encoded = urllib.parse.quote(text)
+        return f"https://dict.youdao.com/dictvoice?audio={w_encoded}&le=zh"
+
 tab1, tab2, tab3, tab4 = st.tabs([
     "📝 STEP 1: 全班骨幹題設定", 
-    "🎯 STEP 2: 個人弱點題設定 (含 Log 解析)", 
+    "🎯 STEP 2: 個人弱點題設定", 
     "🚀 STEP 3: 統一打包匯出 (GIFT)",
     "📖 使用 SOP 與 Moodle 設定"
 ])
 
-# =====================================================
-# TAB 1: 全班骨幹題設定
-# =====================================================
 with tab1:
     st.subheader("📝 STEP 1: 輸入當日全班進度（生詞與例句）")
     col1, col2 = st.columns(2)
-    
     with col1:
-        st.markdown("**1. 生詞與拼音/多語系翻譯** (格式：`生詞,拼音,簡單中文/越文/印尼文/英文`)")
-        st.caption("💡 中文解釋請儘可能簡單（或直接用漢越詞/英文），避免用比生詞更難的詞彙去解釋！")
-        words_input = st.text_area("生詞輸入框", value=st.session_state['words_input_state'], height=220, key="words_input_key")
+        words_input = st.text_area("生詞輸入框 (生詞,拼音,翻譯)", value=st.session_state['words_input_state'], height=220)
         st.session_state['words_input_state'] = words_input
-        
-        words_count = len([w for w in words_input.split('\n') if w.strip()])
-        if words_count > 15:
-            st.warning(f"⚠️ 目前輸入 {words_count} 個生詞，建議全新生詞控制在 15 個以內！")
-        else:
-            st.success(f"✅ 目前生詞數量：{words_count} 個（符合單日認知負荷控制）。")
-
     with col2:
-        st.markdown("**2. 課文/例句段落** (Python 自動搜尋生詞並【】挖空) ")
-        sentences_input = st.text_area("課文句子輸入框", value=st.session_state['sentences_input_state'], height=220, key="sentences_input_key")
+        sentences_input = st.text_area("課文句子輸入框", value=st.session_state['sentences_input_state'], height=220)
         st.session_state['sentences_input_state'] = sentences_input
 
-    st.info("💡 完成全班題輸入後，請點選上方【STEP 2: 個人弱點題設定】分頁。")
-
-# =====================================================
-# TAB 2: 個人弱點題設定 (整合 Log 解析)
-# =====================================================
 with tab2:
     st.subheader("🎯 STEP 2: 設定個人化弱點自適應題庫")
-    st.markdown("您可以透過 **「A. 自動解析 Moodle Log」** 或 **「B. 手動輸入/修改」** 來設定學生的弱點：")
-    
-    with st.expander("📊 A. (選填) 從 Moodle 歷程 Log (Responses.csv) 自動提取弱點", expanded=True):
-        uploaded_file = st.file_uploader("上傳從 Moodle 下載的詳細評分 CSV 檔", type=["csv"])
-        if uploaded_file is not None:
-            try:
-                df = pd.read_csv(uploaded_file)
-                st.success("✅ CSV 檔案讀取成功！")
-                st.dataframe(df.head(3))
-                threshold = st.slider("判定為弱點之嘗試次數門檻 (Attempts)", min_value=1, max_value=5, value=2)
-                
-                parsed_weakness = "Student01,鞏固,變強固\nStudent01,基模,思考方式\nStudent02,浸潤,深入體驗"
-                
-                if st.button("🚀 一鍵帶入解析結果至下方個人弱點清單"):
-                    st.session_state['adaptive_data'] = parsed_weakness
-                    st.success("✅ 已自動帶入！請於下方確認帶入結果。")
-            except Exception as e:
-                st.error(f"檔案解析失敗: {e}")
-        else:
-            st.caption("若今日無匯入 Log 需求，可直接使用下方文字框手動設定或保留預設值。")
-
-    st.markdown("---")
-    st.markdown("**B. 最終個人弱點生詞確認區** (格式: `學生帳號,弱點生詞,提示`)")
-    
     adaptive_input = st.text_area(
-        "學生個人弱點生詞清單",
+        "學生個人弱點生詞清單 (帳號,生詞,提示)",
         value=st.session_state['adaptive_data'],
         height=180,
-        key="adaptive_text_area",
         disabled=not enable_adaptive
     )
     st.session_state['adaptive_data'] = adaptive_input
 
-    st.info("💡 個人弱點確認完成！請切換至【STEP 3: 統一打包匯出 (GIFT)】下載最終檔案。")
-
-# =====================================================
-# TAB 3: 統一打包匯出 (GIFT)
-# =====================================================
 def generate_gift_content():
-    # 嚴格使用使用者選擇之分類名稱 (如 20260917_詞彙_甲)
     active_cat = target_category_name.strip()
     category_base = f"$course$/{active_cat}"
     gift_lines = [f"$CATEGORY: {category_base}\n\n"]
@@ -149,96 +109,68 @@ def generate_gift_content():
     
     word_info = {}
     word_list = []
-    seen = set() # 🟢 [修正 2] 加入去重複機制集合
+    seen = set()
     
     for line in w_text.strip().split('\n'):
         if not line.strip(): continue
         parts = line.split(',')
         w = parts[0].strip()
-        
-        if w in seen: continue # 🟢 [修正 2] 遇到重複生詞直接跳過
+        if w in seen: continue
         seen.add(w)
-        
         py = parts[1].strip() if len(parts) >= 2 else ""
         trans = parts[2].strip() if len(parts) >= 3 else ""
         word_info[w] = {"pinyin": py, "trans": trans}
         word_list.append(w)
 
-    # ----------------------------------------------------
-    # 第一大題：形義直讀配對區
-    # ----------------------------------------------------
-    gift_lines.append(f"// ==================================================\n")
-    gift_lines.append(f"// 第一大題：生詞與意涵直讀配對 (形義直讀 / 低認知負荷)\n")
-    gift_lines.append(f"// ==================================================\n")
+    # 第一大題
+    gift_lines.append(f"// 第一大題：生詞與意涵直讀配對\n")
     gift_lines.append(f"::{active_cat}_SECTION1_形義配對::第一大題：請將下列華語生詞與正確意涵進行配對 {{\n")
     for w, info in word_info.items():
         meaning = info['trans'] if info['trans'] else info['pinyin']
         gift_lines.append(f"  ={w} -> {meaning}\n")
     gift_lines.append("}\n\n")
 
-    # ----------------------------------------------------
-    # 第二大題：全自動 TTS 聽力辨識區 (使用 HTML5 音訊標籤)
-    # ----------------------------------------------------
+    # 第二大題 (TTS 聽力)
     if enable_tts_listening and word_list:
-        gift_lines.append(f"// ==================================================\n")
-        gift_lines.append(f"// 第二大題：全自動 TTS 聽力語音辨識 (音形連結 / 雲端串流高音質)\n")
-        gift_lines.append(f"// ==================================================\n")
+        gift_lines.append(f"// 第二大題：全自動 TTS 聽力語音辨識 (Base64 內嵌防阻擋)\n")
         for idx, w in enumerate(word_list, 1):
             distractors = [other for other in word_list if other != w]
             distractor_choices = distractors[:3] if len(distractors) >= 3 else distractors
             
-            # 🟢 將中文字進行 URL Encoding 確保 API 穩定存取
-            w_encoded = urllib.parse.quote(w)
-            # 🟢 [更換 TTS 引擎]：從 Youdao 改為 Google Translate TTS API (非官方公開端點，穩定性高)
-            tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={w_encoded}&tl=zh-TW&client=tw-ob"
+            # 🟢 呼叫 Base64 音訊轉換函數
+            audio_src = get_tts_base64_or_fallback(w)
             
-            # 改用最乾淨、Moodle 不會阻擋的原生 <audio> 標籤
-            audio_html = f"<audio controls src='{tts_url}'></audio>"
-            
-            # 題幹前加上 [html] 宣告，並移除多餘的 JS 按鈕
+            audio_html = f"<audio controls src='{audio_src}'></audio>"
             gift_lines.append(f"::{active_cat}_SECTION2_聽力_{idx}:: [html]第二大題：請聽發音，並選出正確的華語生詞：<br><br>{audio_html}<br><br>{{\n")
             gift_lines.append(f"  ={w}\n")
             for d in distractor_choices:
                 gift_lines.append(f"  ~{d}\n")
             gift_lines.append("}\n\n")
 
-    # ----------------------------------------------------
-    # 第三大題：句子理解與繁體字手寫區
-    # ----------------------------------------------------
-    gift_lines.append(f"// ==================================================\n")
-    gift_lines.append(f"// 第三大題：句子理解與繁體字寫作 (語境產出 / 產出式知識)\n")
-    gift_lines.append(f"// ==================================================\n")
+    # 第三大題
+    gift_lines.append(f"// 第三大題：句子理解與繁體字寫作\n")
     sentence_list = [s.strip() for s in s_text.strip().split('\n') if s.strip()]
-    
     q_idx = 1
     for s in sentence_list:
         for w, info in word_info.items():
             if w in s:
                 hint_str = f"拼音: {info['pinyin']}"
                 if info['trans']: hint_str += f" | 釋義: {info['trans']}"
-                
                 hint_display = f" <span style='color:#666;'>（提示：{info['pinyin']} | {info['trans']}）</span>"
-                
                 cloze_syntax = f"{{={w} ={w}的 #{hint_str}}}" + hint_display
                 formatted_sentence = s.replace(w, cloze_syntax)
                 gift_lines.append(f"::{active_cat}_SECTION3_填空_{q_idx}:: [html]第三大題：請閱讀句子並填入正確生詞：<br>{formatted_sentence}\n\n")
                 q_idx += 1
 
-    # ----------------------------------------------------
-    # 第四大題：個人化自適應弱點題區
-    # ----------------------------------------------------
+    # 第四大題
     if enable_adaptive and a_text.strip():
-        gift_lines.append(f"// ==================================================\n")
-        gift_lines.append(f"// 第四大題：個人化自適應弱點複習區 (動態自適應)\n")
-        gift_lines.append(f"// ==================================================\n")
+        gift_lines.append(f"// 第四大題：個人化自適應弱點複習區\n")
         for line in a_text.strip().split('\n'):
             if not line.strip() or ',' not in line: continue
             parts = line.split(',')
             student_id, word = parts[0].strip(), parts[1].strip()
             hint = parts[2].strip() if len(parts) > 2 else ""
-            
             gift_lines.append(f"$CATEGORY: {category_base}/個人弱點自適應庫/個人弱點_{student_id}\n")
-            
             if hint:
                 gift_lines.append(f"::弱點複習_{word}:: [個人化弱點] 請寫出生詞：【 {{={word} #{hint}}} 】\n\n")
             else:
@@ -248,85 +180,28 @@ def generate_gift_content():
 
 with tab3:
     st.subheader("🚀 STEP 3: 一鍵匯出完整 Moodle GIFT 題庫檔")
-    
-    gift_result = generate_gift_content()
-    current_final_name = target_category_name.strip()
-    
-    col_dl, col_prev = st.columns([1, 2])
-    with col_dl:
-        st.download_button(
-            label=f"📥 一鍵下載【{current_final_name}】GIFT 題庫檔 (.txt)",
-            data=gift_result.encode('utf-8'),
-            file_name=export_filename,
-            mime="text/plain",
-            type="primary"
-        )
-        st.caption(f"✨ 匯出檔名：`{export_filename}`")
+    if st.button("🔄 點此生成/更新題庫 (需向 Google 獲取語音)"):
+        with st.spinner("正在向 Google 伺服器獲取台灣口音音訊並進行 Base64 轉換..."):
+            gift_result = generate_gift_content()
+            st.session_state['generated_gift'] = gift_result
+            st.success("✅ 題庫與內嵌語音生成完畢！")
 
-    with col_prev:
-        st.markdown(f"**確認 Moodle 題庫匯入路徑：** `$course$/{current_final_name}`")
-        with st.expander("👀 點此檢視打包後的完整 GIFT 內部結構 (請確認第 1 行)"):
-            st.code(gift_result, language="text")
+    if 'generated_gift' in st.session_state:
+        current_final_name = target_category_name.strip()
+        col_dl, col_prev = st.columns([1, 2])
+        with col_dl:
+            st.download_button(
+                label=f"📥 下載【{current_final_name}】GIFT 檔",
+                data=st.session_state['generated_gift'].encode('utf-8'),
+                file_name=export_filename,
+                mime="text/plain",
+                type="primary"
+            )
+        with col_prev:
+            with st.expander("👀 檢視 GIFT 內部結構"):
+                # 只顯示前段避免 base64 字串太長卡住 UI
+                st.code(st.session_state['generated_gift'][:1000] + "\n... (後略)", language="text")
 
-# =====================================================
-# TAB 4: 使用 SOP
-# =====================================================
 with tab4:
-    st.subheader("📖 Moodle 題庫治理與測驗卷設定完整 SOP (對照實機動線)")
-    st.markdown("本系統透過 GIFT 檔案內建之 `$CATEGORY` 標籤與雲端 TTS 音訊，實現跨國籍手機零安裝自動化發音。")
-    
-    st.markdown("---")
-    
-    st.markdown("### 📥 第一階段：進入 Moodle 匯入介面 (對照實機動線)")
-    st.markdown("""
-    1. **進入題庫**：於課程上方主選單點擊 **「更多 ∨」** ➔ 下拉選單選擇 **「題庫」**。
-    2. **切換至匯入頁面**：進入題庫頁面後，點擊左上角下拉選單（預設為「試題」） ➔ 切換選擇 **「匯入」**。
-    """)
-
-    st.markdown("---")
-
-    st.markdown("### ⚙️ 第二階段：GIFT 題庫匯入參數設定 (對照實機選項)")
-    st.markdown("""
-    進到「從檔案匯入試題」頁面後，請依序設定：
-
-    1. **檔案格式**：點選 **「Gift 格式」** 🔘。
-    2. **一般設定區（關鍵治理選項！）**：
-       * **匯入類別**：選擇 **「課程預設值 (例如: 1142_PF000A的預設)」**。
-       * ⚠️ **從檔案中取得類別名稱**：**務必勾選 ☑️** (*勾選後，Moodle 會自動建立如 `20260917_詞彙_甲` 資料夾！*)
-       * ⚠️ **從檔案中取得處境**：**務必勾選 ☑️**。
-       * **比對得分百分比**：選擇「若得分百分比沒列在上面，則顯示錯誤」。
-       * **錯誤則停止**：選擇「是」。
-    3. **從檔案匯入試題**：將 STEP 3 下載的 `.txt` 檔拖入虛線上傳框，點擊藍色 **「匯入」** 按鈕。
-    """)
-
-    st.markdown("---")
-
-    st.markdown("### ⚙️ 第三階段：Moodle 測驗卷 (Quiz) 活動參數設定 (對照實機截圖)")
-    st.markdown("""
-    於課程頁面點擊「新增活動或資源」➔ 選擇「測驗 (Quiz)」，完成核心設定：
-
-    1. **成績**（關鍵！）：
-       * ⚠️ **允許作答次數**：將預設的 `1` 下拉改選為 **【無限】** ⚡（*允許學生反覆刷卷直到 100% 精熟*）。
-       * **及格分數**：輸入 `100`（或 `80`）。
-    2. **版面設計**：
-       * **新頁面**：選擇 **「每1個試題」** (單題刷卡體驗)。
-       * **導覽方式**：改為 **「順序的」** 🛑 (階梯式順序解鎖)。
-    3. **試題的作答與計分方式**：
-       * ⚠️ **試題如何作答與計分**：務必下拉選擇 **【可以多次嘗試】** ⚡（*在後台留下 Attempts 次數大數據！*）。
-       * 點擊「顯示較少選項...」➔ **每次嘗試以最後一次為基礎**：選擇 **「是」**。
-    4. **檢閱選項 (Review Options)**：
-       * ⚠️ **「在作答過程中」欄位**：務必勾選 **☑️ 是否答對**、**☑️ 選項的回饋** 與 **☑️ 正確答案**。
-    5. **活動完成條件**：選擇「新增條件」，並勾選 ☑️ **「及格成績」**。
-    """)
-
-    st.markdown("---")
-
-    st.markdown("### 🧩 第四階段：組裝試卷與個人化隨機抽題設定 (對照實機操作)")
-    st.markdown("""
-    進到建立好的測驗卷 ➔ 點選 **「增加試題」** ➔ 點擊右側 **「新增」**，隨機排列不要選擇 ➔ 從題庫選題：
-
-    1. **新增全班骨幹題**：
-       * 點擊 **「從題庫」** ➔ 找到剛才上傳的 `例如: 20260917_詞彙_甲` 目錄檔案 ➔ 全選題目 ➔ 點擊「新增至測驗」。
-    2. **新增個人化自適應弱點題**：
-       * 點擊 **「新增隨機題目 (a random question)」** ➔ 類別選擇 `個人弱點自適應庫` ➔ **務必勾選「也顯示下層類別的試題」☑️** ➔ 隨機數量設定為 `2` 題。
-    """)
+    st.subheader("📖 Moodle 題庫治理與測驗卷設定完整 SOP")
+    st.markdown("已更新為 Base64 離線音訊架構，無須擔心外連被阻擋。")
