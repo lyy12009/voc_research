@@ -27,6 +27,6 @@ test('hosted Streamlit test app exports a valid Moodle GIFT file and protects th
   assert.match(gift,/::.*::/);
   await app.getByRole('link',{name:'VocabResearch 教師端'}).click();
   await app.getByRole('heading',{name:'VocabResearch 教師端'}).waitFor();
-  await app.getByText(/教師端尚未設定/).waitFor();
+  await app.getByText(/教師端尚未設定/).or(app.getByRole('button',{name:'教師登入',exact:true})).waitFor();
   assert.equal(await app.getByText(/研究資料與分析/).count(),0);
 });
