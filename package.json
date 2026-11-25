@@ -2,7 +2,7 @@
   "name": "voc-research-acceptance",
   "private": true,
   "scripts": {
-    "test:db": "node --test tests/supabase.test.mjs tests/teacher-db.test.mjs tests/research-db.test.mjs tests/delayed-db.test.mjs",
+    "test:db": "node --test tests/supabase.test.mjs tests/teacher-db.test.mjs tests/research-db.test.mjs tests/delayed-db.test.mjs tests/accounts-db.test.mjs",
     "synthetic": "node tests/synthetic-study.mjs",
     "test:study": "node --test tests/synthetic-acceptance.test.mjs",
     "test:browser": "node --test tests/cloud-browser.test.mjs tests/preview-browser.test.mjs"

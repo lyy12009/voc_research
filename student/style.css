@@ -3,6 +3,6 @@
 /* v0.3.7 full-lesson matching */
 main{max-width:1440px}.matchgrid>div{display:block}.matchpool{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start}.matchpool .matchcard{margin:0;min-height:50px;font-size:15px;height:100%}.matchpool [data-left]{font-size:20px}.matchsticky{position:sticky;top:0;background:#fff;z-index:2;padding:8px 0;border-bottom:1px solid #dce3ed}.matchsticky span{display:inline-block;margin-left:10px;padding:4px 8px}.matchsticky .bar{margin-top:5px}@media(max-width:800px){.matchpool{grid-template-columns:1fr}.matchgrid{gap:8px}.matchpool .matchcard{font-size:14px}.matchpool [data-left]{font-size:18px}}
 
-#delayedDialog{width:min(36rem,calc(100% - 2rem));max-height:85vh;border:1px solid #c7ced8;border-radius:12px;padding:1.25rem;overflow:auto}
-#delayedDialog::backdrop{background:#102132b8}
-#delayedDialog input{display:block;margin-top:.35rem}
+#delayedDialog,#passwordDialog{width:min(36rem,calc(100% - 2rem));max-height:85vh;border:1px solid #c7ced8;border-radius:12px;padding:1.25rem;overflow:auto}
+#delayedDialog::backdrop,#passwordDialog::backdrop{background:#102132b8}
+#delayedDialog input,#passwordDialog input{display:block;margin-top:.35rem}

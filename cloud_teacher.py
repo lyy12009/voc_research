@@ -52,6 +52,12 @@ class TeacherStore:
         self.project_url = project_url
         self.ssl_root_cert_pem = ssl_root_cert_pem
 
+    def enroll_question_teacher(self, verified_email):
+        return self._query("select vocab_teacher.enroll_question_teacher(%s, %s, %s)", (), verified_email, text_payload=True)
+
+    def accounts(self, operation, payload=None):
+        return self._query("select vocab_teacher.manage_accounts(%s, %s, %s, %s)", (operation,), payload)
+
     def call(self, action, payload=None):
         return self._query("select vocab_teacher.request(%s, %s, %s, %s)", (action,), payload)
 
@@ -64,7 +70,7 @@ class TeacherStore:
     def delayed(self, payload):
         return self._query("select vocab_teacher.delayed(%s, %s, %s)", (), payload)
 
-    def _query(self, statement, arguments, payload):
+    def _query(self, statement, arguments, payload, *, text_payload=False):
         import psycopg
         from psycopg.conninfo import conninfo_to_dict
         from psycopg.types.json import Jsonb
@@ -84,11 +90,14 @@ class TeacherStore:
                 connection = stack.enter_context(closing(psycopg.connect(self.dsn, **options)))
                 with connection.transaction():
                     return connection.execute(
-                        statement, (*self.identity, *arguments, Jsonb(payload or {})),
+                        statement, (*self.identity, *arguments, payload if text_payload else Jsonb(payload or {})),
                     ).fetchone()[0]
         except psycopg.Error as error:
             messages = {
                 "teacher_denied": "此帳號沒有教師權限",
+                "student_already_exists": "有學號已存在，整批未匯入，既有密碼保持不變",
+                "invalid_student_file": "學生欄位格式或筆數不符",
+                "invalid_invite": "請輸入有效 Google 電子郵件",
                 "revision_conflict": "已有較新的修訂，請重新載入後再編輯",
                 "resource_conflict": "代碼或版本已存在，原有資料保留",
                 "publication_conflict": "此版本已綁定不同內容，請使用新的版本號",

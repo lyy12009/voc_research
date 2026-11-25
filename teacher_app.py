@@ -37,6 +37,9 @@ def controls():
             st.code(enrollment)
             st.stop()
         store = TeacherStore(settings.get("dsn", ""), identity, settings.get("project_url", ""), settings.get("ssl_root_cert_pem"))
+        question_only = (identity[0] == "https://accounts.google.com" and st.user.get("email_verified") is True
+                         and isinstance(st.user.get("email"), str)
+                         and store.enroll_question_teacher(st.user.get("email")))
         store.call("authorize")
     except (PermissionError, RuntimeError) as error:
         st.error(str(error))
@@ -47,7 +50,7 @@ def controls():
             if key.startswith("teacher_"):
                 del st.session_state[key]
         st.session_state["teacher_identity"] = identity
-    return settings, store
+    return settings, store, question_only
 
 
 def read_document(store, kind, name):
@@ -224,8 +227,11 @@ def management(store, settings):
                 st.success("已確認測試版本顯示狀態")
 
 
-settings, store = controls()
-for tab, operation in zip(st.tabs(["教材與草稿匯入", "編輯與發布", "學生與研究紀錄", "研究資料與分析"]), (imports, editor, management, research_workspace)):
+settings, store, question_only = controls()
+pages = {"教材與草稿匯入": imports, "編輯與發布": editor}
+if not question_only:
+    pages.update({"學生與研究紀錄": management, "研究資料與分析": research_workspace})
+for tab, operation in zip(st.tabs(list(pages)), pages.values()):
     with tab:
         try:
             if operation is imports:

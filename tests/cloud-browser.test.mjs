@@ -260,4 +260,25 @@ test('student Chrome and PostgreSQL against a synthetic course', { timeout: 1200
     const practice=await teacherDelayed({operation:'history',student:code});
     assert.ok(practice.events.some(e=>e.stage==='cloze'&&e.selected==='錯誤'));
   });
+  if(db) await t.test('student changes password through the page without storing either password',async()=>{
+    const page=await context.newPage();
+    const endpoint=projectUrl+'/rest/v1/rpc/vocab_change_password';
+    await page.route(endpoint,async route=>{
+      const packet=route.request().postDataJSON().packet;
+      const {rows:[{reply}]}=await db.query('select public.vocab_change_password($1) reply',[packet]);
+      await route.fulfill({json:reply});
+    });
+    await page.goto(url);
+    await page.locator('#changePassword').click();
+    await page.getByLabel('學號',{exact:true}).fill('IT_SECOND');
+    await page.getByLabel('原密碼',{exact:true}).fill('fixture-second-pin');
+    await page.getByLabel('新密碼',{exact:true}).fill('fixture-password-updated');
+    await page.getByLabel('確認新密碼',{exact:true}).fill('fixture-password-updated');
+    await page.locator('#savePassword').click();
+    await sync(page,'密碼已更新');
+    assert.equal(await page.locator('#passwordDialog').isVisible(),false);
+    const stored=await page.evaluate(()=>JSON.stringify(localStorage));
+    assert.ok(!stored.includes('fixture-second-pin')&&!stored.includes('fixture-password-updated'));
+    await page.close();
+  });
 });

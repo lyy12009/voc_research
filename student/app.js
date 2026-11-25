@@ -59,7 +59,8 @@ async function loadBackend(){
 
 async function requestBackend(packet,timeout){
  const {projectUrl,publishableKey}=await loadBackend();
- const endpoint=packet.operation.startsWith('delayed_')?'vocab_delayed':'vocab_request';
+ const endpoint=packet.operation==='change_password'?'vocab_change_password':
+  packet.operation.startsWith('delayed_')?'vocab_delayed':'vocab_request';
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),timeout);
  try{
@@ -232,6 +233,48 @@ $('retry').onclick=()=>{const code=$('student').value.trim(),secret=$('pin').val
  const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json'});
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pending-events.json';a.click();URL.revokeObjectURL(a.href);
 };
+if(!preview){
+ const passwordDialog=$('passwordDialog'), passwordForm=$('passwordForm');
+ const message=$('passwordMessage'), savePassword=$('savePassword');
+ $('changePassword').onclick=()=>{
+  $('passwordStudent').value=$('student').value.trim();
+  message.textContent='';
+  passwordDialog.showModal();
+ };
+ $('closePassword').onclick=()=>passwordDialog.close();
+ passwordDialog.oncancel=event=>{if(savePassword.disabled)event.preventDefault()};
+ passwordDialog.onclose=()=>passwordForm.reset();
+ passwordForm.onsubmit=async event=>{
+  event.preventDefault();
+  const fields=new FormData(passwordForm);
+  const studentCode=String(fields.get('studentCode')).trim(), pin=String(fields.get('pin'));
+  const newPassword=String(fields.get('newPassword'));
+  if(newPassword!==fields.get('confirmation')||newPassword.trim()===''||
+      Array.from(newPassword).length<8||new TextEncoder().encode(newPassword).length>72){
+   message.textContent='請確認兩次新密碼一致，至少 8 字元、最多 72 個 UTF-8 位元組。';
+   return;
+  }
+  savePassword.disabled=true;
+  $('closePassword').disabled=true;
+  try{
+   const reply=await requestBackend({operation:'change_password',requestId:uuid(),protocol:PROTOCOL,studentCode,pin,newPassword},20000);
+   if(!reply.ok){
+    message.textContent=reply.error==='invalid_new_password'?'新密碼須與原密碼不同。':'驗證失敗，請確認學號與原密碼。';
+    return;
+   }
+   if($('student').value.trim()===studentCode)$('pin').value='';
+   if(student===studentCode)window.setTimeout(()=>window.location.reload(),2000);
+   $('sync').textContent='密碼已更新。請用新密碼登入；未同步事件仍會保留。';
+   passwordDialog.close();
+  }catch{
+   message.textContent='未收到更新確認。請先用新密碼嘗試登入，再決定是否重試。';
+  }finally{
+   savePassword.disabled=false;
+   $('closePassword').disabled=false;
+  }
+ };
+}
+
 let delayedOpening=false;
 async function openDelayed(ctx){
  if(delayedOpening)return;
