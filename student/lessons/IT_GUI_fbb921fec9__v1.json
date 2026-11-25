@@ -1,0 +1,32 @@
+{
+  "schema": "vocab-research-1",
+  "id": "IT_GUI_fbb921fec9",
+  "version": "v1",
+  "title": "合成雲端教材",
+  "book": "合成冊",
+  "lesson": "合成課",
+  "appVersion": "0.3.11",
+  "backendProtocol": "supabase-v1",
+  "quizMode": "practice",
+  "availableAt": null,
+  "clozeGrading": "server",
+  "availableLanguages": [
+    "en"
+  ],
+  "words": [
+    {
+      "id": "W33E3580C09",
+      "word": "甲",
+      "pinyin": "",
+      "meaning": "",
+      "meanings": {
+        "en": "alpha",
+        "vi": "",
+        "id": ""
+      },
+      "sentence": "這裡有＿＿。",
+      "category": "textbook",
+      "source": "對話1"
+    }
+  ]
+}
