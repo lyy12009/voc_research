@@ -44,6 +44,9 @@ class TeacherStore:
     def research(self, filters):
         return self._query("select vocab_teacher.research(%s, %s, %s)", (), filters)
 
+    def delayed(self, payload):
+        return self._query("select vocab_teacher.delayed(%s, %s, %s)", (), payload)
+
     def _query(self, statement, arguments, payload):
         import psycopg
         from psycopg.conninfo import conninfo_to_dict

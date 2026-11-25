@@ -16,6 +16,8 @@ class MemoryStore:
         self.registrations = []
         self.permitted = True
 
+    identity = ("https://issuer.test", "s")
+
     def call(self, action, payload=None):
         if not self.permitted:
             raise PermissionError("此帳號沒有教師權限")
@@ -146,6 +148,40 @@ class TeacherTests(unittest.TestCase):
             self.assertFalse(app.exception)
             self.assertEqual([name for name, _ in store.registrations[1:]], ["can_manage_version", "visibility"])
             self.assertEqual(visibility.call_args.args[1:3], ("IT_fixture__v1.json", False))
+
+    def test_teacher_research_views_and_delayed_schedule(self):
+        from research_ui import PAGES
+
+        class Claims(dict):
+            is_logged_in = True
+
+        class ResearchStore(MemoryStore):
+            def delayed(self, packet):
+                if packet["operation"] == "history":
+                    return {"events":[]}
+                if packet["operation"] == "read":
+                    return {"tests":[],"answers":[]}
+                self.registrations.append(("delayed", packet))
+                return True
+
+            def research(self, filters):
+                return {"sessions":[],"events":[],"words":[]}
+
+        store = ResearchStore()
+        with patch("streamlit.user", Claims(iss="https://issuer.test", sub="s")), patch("cloud_teacher.TeacherStore", return_value=store):
+            app = self.teacher().run()
+            find(app.text_input, "安排學生代碼").set_value("IT_STUDENT")
+            find(app.text_input, "安排課程 ID").set_value("IT_COURSE")
+            find(app.text_input, "指定教材版本").set_value("v1")
+            find(app.button, "儲存延宕測驗安排").click().run()
+            self.assertEqual(store.registrations[-1][1]["operation"],"assign")
+            find(app.button, "查詢研究紀錄").click().run()
+            for page in PAGES:
+                find(app.radio, "研究頁面").set_value(page).run()
+                self.assertFalse(app.exception)
+                self.assertFalse(app.error)
+            self.assertTrue(app.get("download_button"))
+            self.assertFalse(app.get("link_button"))
 
     def test_input_boundaries(self):
         with self.assertRaises(PermissionError):

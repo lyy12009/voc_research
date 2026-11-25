@@ -11,6 +11,7 @@ from cloud_teacher import KEY, PublicationConflict, TeacherStore, new_draft, pri
 from core import TEXT_PARTS, accepted_answers, sentence_candidates, validate_and_build
 from preview import preview_html
 from research_metrics import CATEGORIES
+from research_ui import render as research_workspace
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = {ROOT / path: path for path in github_publish.ASSETS}
@@ -215,7 +216,7 @@ def management(store, settings):
 
 
 settings, store = controls()
-for tab, operation in zip(st.tabs(["教材與草稿匯入", "編輯與發布", "學生與研究紀錄"]), (imports, editor, management)):
+for tab, operation in zip(st.tabs(["教材與草稿匯入", "編輯與發布", "學生與研究紀錄", "研究資料與分析"]), (imports, editor, management, research_workspace)):
     with tab:
         try:
             if operation is imports:

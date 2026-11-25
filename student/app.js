@@ -59,10 +59,11 @@ async function loadBackend(){
 
 async function requestBackend(packet,timeout){
  const {projectUrl,publishableKey}=await loadBackend();
+ const endpoint=packet.operation.startsWith('delayed_')?'vocab_delayed':'vocab_request';
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),timeout);
  try{
-  const response=await fetch(projectUrl+'/rest/v1/rpc/vocab_request',{
+  const response=await fetch(projectUrl+'/rest/v1/rpc/'+endpoint,{
    method:'POST', headers:{apikey:publishableKey,'Content-Type':'application/json'},
    body:JSON.stringify({packet}),signal:controller.signal,redirect:'error'
   });
@@ -231,10 +232,58 @@ $('retry').onclick=()=>{const code=$('student').value.trim(),secret=$('pin').val
  const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json'});
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pending-events.json';a.click();URL.revokeObjectURL(a.href);
 };
+let delayedOpening=false;
+async function openDelayed(ctx){
+ if(delayedOpening)return;
+ delayedOpening=true;
+ const messages={not_assigned:'尚未安排延宕測驗',not_open:'延宕測驗尚未開放',makeup_scheduled:'補測尚未開放',missing:'測驗未作答，已標記缺失',submitted:'已鎖定第一次正式作答'};
+ try{
+  const result=await controlRequest(ctx,'delayed_status');
+  if(messages[result.status]){
+   $('sync').textContent=messages[result.status]+(result.opens?`（原定 ${result.opens} 至 ${result.closes}）`:'');
+   return;
+  }
+  if(result.courseVersion!==ctx.lesson.version){
+   $('sync').textContent='請選擇教師指定的教材版本：'+result.courseVersion;
+   return;
+  }
+  const dialog=$('delayedDialog'), form=$('delayedForm'), note=$('delayedNote');
+  note.textContent=result.status==='open_makeup'?'補測：只保存第一次正式提交。':'只保存第一次正式提交。空白題會記為未作答題目。';
+  $('delayedItems').innerHTML=ctx.lesson.words.map(word=>`<p><label>${h(word.sentence)}<input name="${h(word.id)}" maxlength="1000" autocomplete="off"></label></p>`).join('');
+  form.onsubmit=async event=>{
+   event.preventDefault();
+   if(!window.confirm('確定交卷？第一次正式作答將鎖定。'))return;
+   const button=$('delayedSubmit');
+   button.disabled=true;
+   $('delayedClose').disabled=true;
+   try{
+    const receipt=await controlRequest(ctx,'delayed_submit',{answers:Object.fromEntries(new FormData(form))});
+    note.textContent=messages[receipt.status]||'測驗未確認，請重試。';
+    if(receipt.status==='submitted'){
+     $('sync').textContent=messages.submitted;
+     dialog.close();
+    }
+   }catch{
+    note.textContent='尚未收到交卷確認。答案仍在畫面，可重試或重新登入查詢。';
+   }finally{
+    button.disabled=false;
+    $('delayedClose').disabled=false;
+   }
+  };
+  dialog.oncancel=event=>{if($('delayedSubmit').disabled)event.preventDefault()};
+  dialog.onclose=()=>{form.onsubmit=null;$('delayedItems').replaceChildren()};
+  dialog.showModal();
+ }catch{
+  $('sync').textContent='無法查詢延宕測驗，請確認帳號、PIN 與連線。';
+ }finally{delayedOpening=false}
+}
+if(!preview)$('delayedClose').onclick=()=>$('delayedDialog').close();
+
 $('start').onclick=()=>{const nextLesson=courses[+$('course').value],nextStudent=$('student').value.trim(),nextPin=$('pin').value,nextLanguage=$('language').value;
- if(!nextLesson)return alert('請選擇課程');if(!(nextLesson.availableLanguages||['en']).includes(nextLanguage))return alert('這一課尚未完成此語言的詞義');if(!preview&&(!nextStudent||!nextPin))return alert('請輸入學生代碼與 PIN');if(!nextLesson.words?.length)return alert('沒有可用生詞');
+ if(!nextLesson)return alert('請選擇課程');if((preview||mode.value!=='delayed')&&!(nextLesson.availableLanguages||['en']).includes(nextLanguage))return alert('這一課尚未完成此語言的詞義');if(!preview&&(!nextStudent||!nextPin))return alert('請輸入學生代碼與 PIN');if(!nextLesson.words?.length)return alert('沒有可用生詞');
 
  if(preview){lesson=nextLesson;student=nextStudent||'PREVIEW';pin='';language=nextLanguage;sessionId=uuid();sessionStarted=Date.now();phase=Number($('previewStage').value);clozeOrder=[];clozeMethods={};clozeErrors={};matchState=null;round=phase===0?0:1;ix=0;flipped=false;completed=false;$('workspace').classList.remove('hidden');render();return;}
+ if($('mode').value==='delayed'){openDelayed({lesson:nextLesson,student:nextStudent,pin:nextPin});return;}
  dailyStart(nextLesson,nextStudent,nextPin,nextLanguage);
 };
 function msg(t,type='hint'){$('notice').innerHTML=`<p class="${type}">${h(t)}</p>`}

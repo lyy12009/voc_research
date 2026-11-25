@@ -218,4 +218,46 @@ test('student Chrome and PostgreSQL against a synthetic course', { timeout: 1200
     assert.ok(cloze.every(event=>event.submission_id&&Number(event.word_attempt)>0&&Number(event.elapsed_session_ms)>=0));
     assert.equal(new Set(result.events.map(event=>event.event_id)).size,result.events.length);
   });
+  if(db) await t.test('delayed dialogue commits once and stays locked after lost response and reload',async()=>{
+    const teacherDelayed=packet=>db.query('select vocab_teacher.delayed($1,$2,$3) as result',
+      ['https://issuer.test','teacher-A',packet]).then(res=>res.rows[0].result);
+    const end=(await db.query("select ((statement_timestamp() at time zone 'Asia/Taipei')::date-8)::text as end_day" )).rows[0].end_day;
+    assert.equal(await teacherDelayed({operation:'assign',student:code,course:courseId,version:'v1',end_date:end}),true);
+    const urlDelayed=projectUrl+'/rest/v1/rpc/vocab_delayed';
+    let lost=false;
+    await context.route(urlDelayed,async route=>{
+      const packet=route.request().postDataJSON().packet;
+      const {rows:[{reply}]}=await db.query('select public.vocab_delayed($1) reply',[packet]);
+      if(packet.operation==='delayed_submit'&&!lost){
+        lost=true;
+        await route.abort('failed');
+      }else await route.fulfill({json:reply});
+    });
+    const enter=async page=>{
+      await page.goto(url);
+      await page.locator('#course option').nth(1).waitFor({state:'attached'});
+      await page.selectOption('#course','0');
+      await page.selectOption('#mode','delayed');
+      await page.fill('#student',code);
+      await page.fill('#pin',pin);
+      await page.click('#start');
+    };
+    await enter(first);
+    await first.locator('#delayedDialog').waitFor();
+    await first.locator('#delayedItems input[name="W1"]').fill('先修詞');
+    await first.locator('#delayedItems input[name="W2"]').fill('乙');
+    first.once('dialog',d=>d.accept());
+    await first.click('#delayedSubmit');
+    await first.getByText(/尚未收到交卷確認/).waitFor();
+    assert.equal(await first.locator('#delayedItems input[name="W1"]').inputValue(),'先修詞');
+    await enter(first);
+    await sync(first,'已鎖定第一次正式作答');
+    await enter(second);
+    await sync(second,'已鎖定第一次正式作答');
+    assert.equal(await first.locator('#delayedDialog').isVisible(),false);
+    const result=await teacherDelayed({operation:'read',student:code,course:courseId});
+    assert.equal(result.answers.find(a=>a.word_id==='W1').answer_type,'accepted_alternative');
+    const practice=await teacherDelayed({operation:'history',student:code});
+    assert.ok(practice.events.some(e=>e.stage==='cloze'&&e.selected==='錯誤'));
+  });
 });
