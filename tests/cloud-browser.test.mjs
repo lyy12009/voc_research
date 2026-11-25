@@ -209,5 +209,13 @@ test('student Chrome and PostgreSQL against a synthetic course', { timeout: 1200
     assert.ok(records.some(r=>r.selected?.includes('先修詞')&&r.correct_server===true&&r.target_answer===false));
     assert.ok(records.some(r=>r.correct_server===true&&r.target_answer===true));
     assert.deepEqual(await teacher(db,'answers',{name:session.session_id},'teacher-B'),[]);
+    const {rows:[{result}]}=await db.query('select vocab_teacher.research($1,$2,$3) result',
+      ['https://issuer.test','teacher-A',{from:session.practice_date,to:session.practice_date,student:code,course:courseId}]);
+    assert.deepEqual(new Set(result.events.map(event=>event.stage)),new Set(['card','match','cloze']));
+    const cloze=result.events.filter(event=>event.question_type==='context_cloze'&&event.action==='answer');
+    assert.ok(cloze.some(event=>event.first_attempt==='true'&&event.correct_server===false&&event.selected==='錯誤'));
+    assert.ok(cloze.some(event=>event.correct_server===true&&event.target_hit===false&&event.selected.includes('先修詞')));
+    assert.ok(cloze.every(event=>event.submission_id&&Number(event.word_attempt)>0&&Number(event.elapsed_session_ms)>=0));
+    assert.equal(new Set(result.events.map(event=>event.event_id)).size,result.events.length);
   });
 });

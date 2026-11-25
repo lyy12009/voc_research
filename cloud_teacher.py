@@ -28,6 +28,10 @@ def verify_pooler(settings, project_url):
         raise ValueError("Restricted TLS session pooler required")
 
 
+class PublicationConflict(RuntimeError):
+    """An immutable course version already contains different data."""
+
+
 class TeacherStore:
     def __init__(self, dsn, identity, project_url):
         self.dsn = dsn
@@ -35,6 +39,12 @@ class TeacherStore:
         self.project_url = project_url
 
     def call(self, action, payload=None):
+        return self._query("select vocab_teacher.request(%s, %s, %s, %s)", (action,), payload)
+
+    def research(self, filters):
+        return self._query("select vocab_teacher.research(%s, %s, %s)", (), filters)
+
+    def _query(self, statement, arguments, payload):
         import psycopg
         from psycopg.conninfo import conninfo_to_dict
         from psycopg.types.json import Jsonb
@@ -45,8 +55,7 @@ class TeacherStore:
             with closing(psycopg.connect(self.dsn, connect_timeout=5)) as connection:
                 with connection.transaction():
                     return connection.execute(
-                        "select vocab_teacher.request(%s, %s, %s, %s)",
-                        (*self.identity, action, Jsonb(payload or {})),
+                        statement, (*self.identity, *arguments, Jsonb(payload or {})),
                     ).fetchone()[0]
         except psycopg.Error as error:
             messages = {
@@ -58,6 +67,8 @@ class TeacherStore:
             reason = error.diag.message_primary
             if reason == "teacher_denied":
                 raise PermissionError(messages[reason]) from None
+            if reason == "publication_conflict":
+                raise PublicationConflict(messages[reason]) from None
             raise RuntimeError(messages.get(reason, "Supabase 操作未確認，請核對設定並重試")) from None
         except ValueError:
             raise RuntimeError("請使用相同專案、受限帳號及憑證驗證的 Supabase Session Pooler") from None

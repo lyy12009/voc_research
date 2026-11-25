@@ -8,3 +8,4 @@ data/
 teacher-private/
 playwright-report/
 node_modules/
+supabase/.temp/

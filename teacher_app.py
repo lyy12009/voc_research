@@ -7,9 +7,10 @@ import streamlit as st
 from streamlit.components.v1 import html
 
 import github_publish
-from cloud_teacher import KEY, TeacherStore, new_draft, principal, read_import, validated_publication
+from cloud_teacher import KEY, PublicationConflict, TeacherStore, new_draft, principal, read_import, validated_publication
 from core import TEXT_PARTS, accepted_answers, sentence_candidates, validate_and_build
 from preview import preview_html
+from research_metrics import CATEGORIES
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = {ROOT / path: path for path in github_publish.ASSETS}
@@ -110,7 +111,14 @@ def publish(store, settings, public, private):
     if not token:
         raise ValueError("尚未設定測試發布憑證")
     digest = hashlib.sha256(github_publish.encode_json(public)).hexdigest()
-    store.call("course", {"document": private, "manifest": {"sha256": digest, "branch": branch, "backend": config["projectUrl"]}})
+    packet = {"document": private, "manifest": {"sha256": digest, "branch": branch, "backend": config["projectUrl"]}}
+    try:
+        store.call("course", packet)
+    except PublicationConflict:
+        # The bridge still verifies the immutable public manifest and every legacy private field.
+        legacy = private | {"words": [{key: value for key, value in word.items() if key != "category"}
+                                      for word in private["words"]]}
+        store.call("course", packet | {"document": legacy})
     st.info("Supabase 私人答案鍵已確認。若 GitHub 階段失敗，請用相同版本及內容重試。")
     path, _ = github_publish.publish(token, public, ASSETS, config, branch)
     st.success(f"已發布至測試分支的 {path}")
@@ -145,6 +153,14 @@ def editor(store, settings):
             source = source if isinstance(source, dict) else {}
             row["meanings"] = {language: input_text(label, source.get(language), f"{index}_{language}")
                                for language, label in (("en", "英語"), ("vi", "越南語"), ("id", "印尼語"))}
+            categories = list(CATEGORIES)[:-1]
+            stored_category = row.get("category") or "unknown"
+            if stored_category not in categories:
+                categories.append(stored_category)
+            row["category"] = st.selectbox("生詞類別", categories, index=categories.index(stored_category),
+                                          format_func=lambda value: CATEGORIES.get(value, value),
+                                          key=f"teacher_{epoch}_{index}_category")
+
             row["accepted"] = input_text("其他可接受答案（選填，每行一個）",
                                          "\n".join(accepted_answers(row.get("accepted"))), f"{index}_accepted", True)
             rows.append(row)

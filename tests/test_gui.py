@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
-from cloud_teacher import principal, read_import, validated_publication, verify_pooler
+from cloud_teacher import PublicationConflict, principal, read_import, validated_publication, verify_pooler
 
 
 def find(elements, label):
@@ -91,6 +91,7 @@ class TeacherTests(unittest.TestCase):
             find(app.button, "以選擇的課次建立草稿").click().run()
             self.assertEqual(find(app.text_input, "生詞").value, "乙")
             self.assertIn("＿＿", find(app.text_input, "填空句").value)
+            find(app.selectbox, "生詞類別").select("topic")
             for label, value in [("草稿名稱","synthetic"),("課程 ID","IT_gui"),("課程名稱","合成教材"),
                                  ("拼音","yǐ"),("英語","beta"),("越南語","beta-vi"),("印尼語","beta-id")]:
                 find(app.text_input, label).set_value(value)
@@ -102,10 +103,26 @@ class TeacherTests(unittest.TestCase):
             find(app.button, "開啟草稿").click().run()
             self.assertEqual(find(app.text_area, "其他可接受答案（選填，每行一個）").value, "第二")
             self.assertEqual(find(app.text_input, "越南語").value, "beta-vi")
+            self.assertEqual(find(app.selectbox, "生詞類別").value, "topic")
             find(app.button, "登錄並發布合成測試教材").click().run()
             self.assertFalse(app.exception)
             self.assertEqual(store.registrations[-1][1]["document"]["words"][0]["accepted"], ["第二"])
             self.assertNotIn("accepted", push.call_args.args[1]["words"][0])
+            self.assertEqual(store.registrations[-1][1]["document"]["words"][0]["category"], "topic")
+            original_call = store.call
+
+            def legacy_call(action, payload=None):
+                if action == "course" and "category" in payload["document"]["words"][0]:
+                    store.registrations.append((action, payload))
+                    raise PublicationConflict("legacy")
+                return original_call(action, payload)
+
+            store.call = legacy_call
+            find(app.button, "登錄並發布合成測試教材").click().run()
+            first, retry = [payload for _, payload in store.registrations[-2:]]
+            self.assertEqual(first["manifest"], retry["manifest"])
+            self.assertNotIn("category", retry["document"]["words"][0])
+            store.call = original_call
             push.side_effect = RuntimeError("測試 GitHub 失敗")
             find(app.button, "登錄並發布合成測試教材").click().run()
             self.assertIn("Supabase 私人答案鍵已確認", app.info[-1].value)

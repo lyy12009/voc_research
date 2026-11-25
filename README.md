@@ -20,7 +20,7 @@ Chrome 測試使用隔離的 PGlite PostgreSQL 與真實學生頁面。若系統
 ## 隔離 Community Cloud App
 
 - 部署獨立的測試 App，選擇開發分支、`app.py` 和 Python 3.12。現有 `voc_research` App 綁定 `main`。
-- 在隔離 Supabase 專案先核對遷移史。空白測試庫依序套用三份 migration。既有資料庫如已套用前兩份，只審查及套用第三份。正式環境需先確認安全設定與權限。
+- 在隔離 Supabase 專案先核對遷移史。空白測試庫依序套用所有 migration。既有資料庫依遷移史僅審查及套用尚未執行的增量 migration。正式環境需先確認安全設定與權限。
 - 由資料庫管理者在受控連線建立專用 LOGIN 角色，例如 `vocab_teacher_web`，啟用繼承，停用 superuser、createrole、createdb、replication 及 bypassrls，僅授予 `vocab_teacher_runtime` 成員資格。使用管理端安全輸入方式設定密碼，勿把密碼放入指令歷史或 SQL 檔。不要將私有 schema 加到 Data API exposed schemas。
 - 以 OIDC 提供者的正確 issuer 與穩定 subject，在 `vocab_teacher.identities` 登錄已核准的教師。Streamlit 驗證登入，資料庫每次操作重新確認帳號仍啟用。停權可將 `active` 設為 false。教師僅查閱其負責的課程與學生。研究紀錄不經由瀏覽器持有的資料庫憑證。
 - 以官方 OIDC 設定啟用 Streamlit 身分驗證。回呼使用測試 App 的 `/oauth2callback`。確認 Community Cloud 帳號的私有 App 額度及現有 Moodle 使用者可見性，再規劃正式切換。
@@ -50,3 +50,7 @@ github_token = "<repository-scoped contents-write credential>"
 教師可在 GUI 匯入既有課文 JSON（冊、課、對話／文章）與既有草稿 JSON（含 `lesson_key`、`meta`、`rows`）。舊詞庫可先用原專案的轉換器產生含三語詞義的草稿，再匯入。部署儲存庫不含正式教材、詞庫、草稿與答案鍵。未獲授權前，僅匯入合成資料。
 
 私人文件按教師、名稱與修訂儲存在 PostgreSQL。相同內容可重送，過時的編輯會收到衝突提示。發布以課程 ID、版本及公開內容摘要比對，私人答案只登錄至資料庫。資料庫稽核保存操作者、時間、操作和資源識別，排除 PIN 與私有作答內容。
+
+## 研究資料結構檢核
+
+[研究資料欄位、指標及延宕測驗缺口](RESEARCH.md)
