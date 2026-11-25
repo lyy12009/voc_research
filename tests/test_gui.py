@@ -94,6 +94,7 @@ class TeacherTests(unittest.TestCase):
             self.assertEqual(find(app.text_input, "生詞").value, "乙")
             self.assertIn("＿＿", find(app.text_input, "填空句").value)
             find(app.selectbox, "生詞類別").select("topic")
+            find(app.text_input, "詞性（教師確認，選填）").set_value("名詞")
             for label, value in [("草稿名稱","synthetic"),("課程 ID","IT_gui"),("課程名稱","合成教材"),
                                  ("拼音","yǐ"),("英語","beta"),("越南語","beta-vi"),("印尼語","beta-id")]:
                 find(app.text_input, label).set_value(value)
@@ -106,11 +107,15 @@ class TeacherTests(unittest.TestCase):
             self.assertEqual(find(app.text_area, "其他可接受答案（選填，每行一個）").value, "第二")
             self.assertEqual(find(app.text_input, "越南語").value, "beta-vi")
             self.assertEqual(find(app.selectbox, "生詞類別").value, "topic")
+            self.assertEqual(find(app.text_input, "詞性（教師確認，選填）").value, "名詞")
             find(app.button, "登錄並發布合成測試教材").click().run()
             self.assertFalse(app.exception)
             self.assertEqual(store.registrations[-1][1]["document"]["words"][0]["accepted"], ["第二"])
             self.assertNotIn("accepted", push.call_args.args[1]["words"][0])
             self.assertEqual(store.registrations[-1][1]["document"]["words"][0]["category"], "topic")
+            self.assertEqual(store.registrations[-1][1]["document"]["words"][0]["part_of_speech"], "名詞")
+            self.assertNotIn("part_of_speech", push.call_args.args[1]["words"][0])
+            find(app.text_input, "詞性（教師確認，選填）").set_value("")
             original_call = store.call
 
             def legacy_call(action, payload=None):
@@ -156,6 +161,9 @@ class TeacherTests(unittest.TestCase):
             is_logged_in = True
 
         class ResearchStore(MemoryStore):
+            def study_metadata(self, filters):
+                return {"students":[],"words":[]}
+
             def delayed(self, packet):
                 if packet["operation"] == "history":
                     return {"events":[]}

@@ -44,6 +44,9 @@ class TeacherStore:
     def research(self, filters):
         return self._query("select vocab_teacher.research(%s, %s, %s)", (), filters)
 
+    def study_metadata(self, filters):
+        return self._query("select vocab_teacher.study_metadata(%s, %s, %s)", (), filters)
+
     def delayed(self, payload):
         return self._query("select vocab_teacher.delayed(%s, %s, %s)", (), payload)
 

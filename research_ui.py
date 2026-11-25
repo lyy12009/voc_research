@@ -10,14 +10,15 @@ from zipfile import ZipFile, ZIP_DEFLATED
 from zoneinfo import ZoneInfo
 
 import streamlit as st
+import pandas as pd
 
-from delayed_metrics import associations, delayed_links, first_per_word, retention_by_category
-from research_metrics import category_stats, course_stats, integer, retrieval_stats
+from study_data import build_study
+from research_metrics import integer, retrieval_stats
 
 PAGES = ("研究總覽", "學生學習歷程", "不同類別生詞的比較分析", "主動提取練習與延宕記憶分析", "研究資料匯出")
 
 
-def export_zip(linked, events, tests):
+def export_zip(linked, events, tests, tables=None, initial=(), rounds=(), course=()):
     salt = secrets.token_bytes(32)
 
     def pseudonym(kind, value):
@@ -58,8 +59,29 @@ def export_zip(linked, events, tests):
         "stage": r["stage"] if r["stage"] in ("card", "match", "cloze") else None,
         "action": r["action"] if r["action"] in ("answer", "card_audio", "card_flip", "card_next") else "other",
     } for r in events]
+    summary = tables or {}
+    initial_export = [{"student":pseudonym("student",r["student_code"]),"word_id":r["word_id"],
+                       **{k:r.get(k) for k in ("initial_target_hit","initial_acceptable","target_status",
+                          "retrievals_to_first_target","retrievals_to_first_correct","observed_retrievals")}}
+                      for r in initial]
+    rounds_export = [identity(r) | {"session":pseudonym("session",r["session_id"]),
+                     "completed":r["completed"],"first_all_correct_round":r["first_all_correct_round"]} for r in rounds]
+    course_export = [{k:v for k,v in r.items() if k!="student_code"} |
+                     {"student":pseudonym("student",r["student_code"])} for r in course]
+    summary = summary | {"course_overview":course_export}
+    workbook_tables = summary | {"acquisition_detail":initial_export,"daily_rounds":rounds_export,
+                                 "delayed":delayed,"assessments":assessments,"practice":practice}
+    workbook = io.BytesIO()
+    with pd.ExcelWriter(workbook, engine="xlsxwriter", engine_kwargs={"options":{
+            "strings_to_formulas":False,"strings_to_urls":False}}) as writer:
+        for sheet, rows in workbook_tables.items():
+            pd.DataFrame(rows).to_excel(writer, sheet_name=sheet, index=False)
+
     stream = io.BytesIO()
     with ZipFile(stream, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("research.xlsx",workbook.getvalue())
+        for name, rows in (summary | {"acquisition_detail":initial_export,"daily_rounds":rounds_export}).items():
+            archive.writestr(name+".csv", encode(rows, list(dict.fromkeys(key for row in rows for key in row))))
         shared = ("student", "course", "version")
         archive.writestr("delayed.csv", encode(delayed, (*shared, "word_id", "target_hit", "correct_server",
                     "answer_type", "is_makeup", "delay_days", "initial_event", "interim_events", "timing_uncertain_events")))
@@ -118,23 +140,23 @@ def render(store, settings):
     query = st.session_state.get("teacher_research_scope")
     if not query:
         return
-    data = store.research(query)
-    delayed = store.delayed({"operation":"read", "course":query["course"], "student":query["student"]})
-    history = store.delayed({"operation":"history", "student":query["student"]})
-    if any(r.get("overflow") for r in (data, delayed, history)):
-        st.warning("資料不足：超過安全查詢上限。請使用學生代碼縮小範圍。")
+    data = build_study(store,query)
+    if data.get("overflow"):
+        st.warning("資料不足：單一學生或查詢總量超過上限。請縮小範圍。")
         return
-    st.caption("日期篩選適用於日常明細。初期表現使用授權範圍內的完整歷程；延宕測驗依學生與課程篩選。")
-    initial = first_per_word(history["events"])
-    selected_words = {row["word_id"] for row in data["words"]}
-    delayed_rows = [r for r in delayed["answers"] if (not query["word"] or r["word_id"] in selected_words)
-                    and (not query["category"] or r["category"] == query["category"])]
-    links = delayed_links(delayed["tests"], delayed_rows, history["events"])
+    st.caption("日期篩選適用於日常明細與開始的課程。延宕依學生與課程篩選，並以授權範圍完整歷程追查初期表現。")
+    links, tables = data["links"],data["tables"]
     if page == PAGES[0]:
         st.subheader("學生 × 課次")
-        st.dataframe(course_stats(data["sessions"], data["events"] if not query["word"] and not query["category"] else []))
+        st.dataframe(data["course"])
+        st.subheader("首次提取與未達標")
+        st.dataframe(tables["acquisition"])
+        st.dataframe(tables["target_curve"])
+        st.caption("命中曲線保留有觀測但未命中的個案。無作答及無法確認次序的個案另列。")
+        st.subheader("每日首次全對輪次")
+        st.dataframe(data["rounds"])
         st.subheader("延宕出席與試卷狀態")
-        st.dataframe(delayed["tests"])
+        st.dataframe(data["tests"])
     elif page == PAGES[1]:
         st.subheader("逐事件日常作答")
         st.dataframe(data["events"])
@@ -143,22 +165,24 @@ def render(store, settings):
         st.subheader("正式延宕作答與再次接觸")
         st.dataframe(links)
     elif page == PAGES[2]:
-        st.dataframe(category_stats(data["events"]))
+        st.dataframe(tables["category_practice"])
+        st.subheader("詞性 × 題型")
+        st.dataframe(tables["pos_practice"])
         st.subheader("目標詞保留率與可接受答案正確率")
         st.caption("首次正式提交的題數為分母，期限內與補測分開。已交卷的空白題計入分母。缺考排除。")
         if links:
-            st.dataframe(retention_by_category(links))
+            st.dataframe(tables["category_delayed"])
+            st.dataframe(tables["pos_delayed"])
         else:
             st.info("延宕保留率：資料不足")
     elif page == PAGES[3]:
         st.dataframe(retrieval_stats(data["events"]))
         st.subheader("初期表現、提取成本與延宕結果")
-        st.dataframe([{ "student_code":key[0], "word_id":key[1], **record} for key, record in initial.items()
-                      if not (query["course"] or query["word"] or query["category"]) or key[1] in selected_words])
+        st.dataframe(data["initial"])
         if links:
             st.dataframe(links)
             st.caption("相關係數依期限內／補測分列，只用完整配對題。少於三題或無變異時留空；同一學生與生詞可重複，僅作探索。")
-            st.dataframe(associations(links))
+            st.dataframe(tables["associations"])
         else:
             st.info("延宕關聯：資料不足")
         st.caption("空白指標表示資料不足。混合來源的同日作答及缺漏序號會影響可辨識的初期指標。")
@@ -168,7 +192,7 @@ def render(store, settings):
         references.update(event_id for row in links for event_id in row["boundary_time_uncertain_event_ids"])
         references.update(row["initial_event"] for row in links if row.get("initial_event"))
         references.update(row["first_correct_event"] for row in links if row.get("first_correct_event"))
-        visible_events = {row["event_id"] for row in data["events"]}
-        export_events = [row for row in history["events"] if row["event_id"] in references | visible_events]
-        st.download_button("下載去識別化研究 ZIP", export_zip(links, export_events, delayed["tests"]),
+        export_ids = references | {row["event_id"] for row in data["events"]}
+        export_events = [row for row in data["history"] if row["event_id"] in export_ids]
+        st.download_button("下載去識別化研究 ZIP", export_zip(links, export_events, data["tests"],tables,data["initial"],data["rounds"],data["course"]),
                            "vocab-research.zip", "application/zip")

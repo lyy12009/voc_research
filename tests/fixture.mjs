@@ -5,7 +5,7 @@ const { pgcrypto } = await import(process.env.VOCAB_PGLITE_CRYPTO || '@electric-
 export async function fixture(dataDir) {
   const db = new PGlite({dataDir,extensions:{pgcrypto}});
   await db.exec('create role anon; create role authenticated');
-  for (const migration of ['202611250001_vocab', '202611250002_private_cloze', '202611250003_cloud_teacher', '202611250004_research', '202611250005_delayed']) {
+  for (const migration of ['202611250001_vocab', '202611250002_private_cloze', '202611250003_cloud_teacher', '202611250004_research', '202611250005_delayed', '202611250006_study_metadata']) {
     await db.exec(await readFile(new URL('../supabase/migrations/'+migration+'.sql', import.meta.url), 'utf8'));
   }
   await db.exec("insert into vocab_teacher.identities values ('https://issuer.test','teacher-A',true),('https://issuer.test','teacher-B',true)");

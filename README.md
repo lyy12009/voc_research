@@ -54,3 +54,16 @@ github_token = "<repository-scoped contents-write credential>"
 ## 研究資料結構檢核
 
 [研究資料欄位、指標及延宕測驗缺口](RESEARCH.md)
+
+## 合成學習歷程驗收
+
+在開發環境執行：
+
+```text
+python -m pip install -r requirements.txt "openpyxl>=3.1,<4"
+npm install
+npm run synthetic
+npm run test:study
+```
+
+`npm run synthetic` 以固定種子 20261125 建立合成 PostgreSQL 資料並核對筆數。每次啟動都在獨立 PGlite 記憶體 DB 重新產生，流程結束自動銷毀，不需要連線字串，也沒有清除正式資料的指令。`npm run test:study` 重新產生同一資料集，經授權 SQL 對帳、操作五個 Streamlit 研究頁面、讀回 CSV 與 Excel 比較。大量歷史日期以測試專用種入，真實作答送出、斷線重送和首次延宕鎖定由小型 RPC 及 Chrome 測試另外驗證。

@@ -30,12 +30,20 @@ def first_per_word(events):
                 break
         first = ordered[0] if ordered else None
         first_correct = next((index for index, row in enumerate(ordered, 1) if row["correct_server"]), None)
+        target = next((index for index, row in enumerate(ordered, 1) if row["target_hit"] is True), None)
+        if target and any(type(row["target_hit"]) is not bool for row in ordered[:target]):
+            target = None
+        reliable_target = bool(ordered) and complete_prefix and all(type(row["target_hit"]) is bool for row in ordered)
         later = [r for r in records if first and r["practice_date"] > first["practice_date"]]
         result[key] = {
             "initial_event": first["event_id"] if first else None,
             "initial_target_hit": first["target_hit"] if first else None,
             "initial_acceptable": first["correct_server"] if first else None,
             "retrievals_to_first_correct": first_correct,
+            "retrievals_to_first_target": target,
+            "target_status": "hit" if target else "right_censored" if reliable_target else "insufficient",
+            "observed_retrievals": len(ordered),
+            "first_target_event": ordered[target-1]["event_id"] if target else None,
             "errors_before_first_correct": first_correct - 1 if first_correct else None,
             "first_correct_event": ordered[first_correct-1]["event_id"] if first_correct else None,
             "later_practice_days": len({row["practice_date"] for row in later}) if first else None,
@@ -96,6 +104,8 @@ def retention_by_category(answers):
     result = []
     for (category, makeup), rows in grouped(answers, ("category", "is_makeup")).items():
         result.append({"category": category, "is_makeup": makeup, "answered_items": len(rows),
+                       "target_hits":sum(row["target_hit"] for row in rows),
+                       "acceptable_hits":sum(row["correct_server"] for row in rows),
                        "target_retention": sum(row["target_hit"] for row in rows) / len(rows),
                        "acceptable_accuracy": sum(row["correct_server"] for row in rows) / len(rows)})
     return result
@@ -103,7 +113,7 @@ def retention_by_category(answers):
 def associations(rows):
     measures = ("prior_retrievals", "prior_practice_days", "prior_average_gap_days",
                 "prior_observed_session_elapsed_seconds", "initial_acceptable",
-                "errors_before_first_correct", "retrievals_to_first_correct")
+                "errors_before_first_correct", "retrievals_to_first_correct", "retrievals_to_first_target")
     output = []
     for (makeup,), group in grouped(rows, ("is_makeup",)).items():
         for outcome in ("target_hit", "correct_server"):

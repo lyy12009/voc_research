@@ -100,6 +100,10 @@ def validate_and_build(book,lesson,rows,meta,preview=False):
     public={'schema':SCHEMA,'id':id_,'version':version,'title':str(meta['title']),'book':lesson['冊'],'lesson':lesson['課'],'appVersion':APP_VERSION,'backendProtocol':BACKEND_PROTOCOL,'quizMode':'practice','availableAt':None,'clozeGrading':'server','availableLanguages':available_langs,'words':words if preview else [{k:v for k,v in x.items() if k!='accepted'} for x in words]}
     # The private registration payload retains reviewed aliases.
     private={'id':id_,'version':version,'title':str(meta['title']),'practiceOpenAt':meta.get('practiceOpenAt') or None,'delayedOpenAt':meta.get('delayedOpenAt') or None,'delayedCloseAt':meta.get('delayedCloseAt') or None,'words':[{'id':x['id'],'word':x['word'],'meaning':x['meaning'],'meanings':x['meanings'],'accepted':x['accepted'],'category':x['category']} for x in words]}
+    for source, destination in zip(selected, private["words"]):
+        pos = str(source.get("part_of_speech") or "").strip()
+        if pos:
+            destination["part_of_speech"] = pos[:40]
     return problems,public,private
 
 def course_index(current, new_file):

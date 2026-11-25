@@ -116,7 +116,9 @@ def publish(store, settings, public, private):
     try:
         store.call("course", packet)
     except PublicationConflict:
-        # The bridge still verifies the immutable public manifest and every legacy private field.
+        if any(word.get("part_of_speech") for word in private["words"]):
+            raise
+        # The bridge verifies the immutable manifest and every legacy private field.
         legacy = private | {"words": [{key: value for key, value in word.items() if key != "category"}
                                       for word in private["words"]]}
         store.call("course", packet | {"document": legacy})
@@ -162,6 +164,8 @@ def editor(store, settings):
                                           format_func=lambda value: CATEGORIES.get(value, value),
                                           key=f"teacher_{epoch}_{index}_category")
 
+            row["part_of_speech"] = st.text_input("詞性（教師確認，選填）", value=str(row.get("part_of_speech") or ""),
+                                                 max_chars=40, key=f"teacher_{epoch}_{index}_pos")
             row["accepted"] = input_text("其他可接受答案（選填，每行一個）",
                                          "\n".join(accepted_answers(row.get("accepted"))), f"{index}_accepted", True)
             rows.append(row)
