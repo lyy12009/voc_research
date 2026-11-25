@@ -1,0 +1,11 @@
+.streamlit/secrets.toml
+.env*
+__pycache__/
+.pytest_cache/
+.venv/
+drafts/
+data/
+teacher-private/
+playwright-report/
+node_modules/
+supabase/.temp/

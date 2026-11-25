@@ -1,0 +1,10 @@
+[logger]
+level = "warning"
+
+[client]
+showErrorDetails = "none"
+
+[server]
+enableCORS = true
+enableXsrfProtection = true
+maxUploadSize = 2
