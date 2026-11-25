@@ -31,7 +31,7 @@ def controls():
     st.sidebar.button("教師登出", on_click=st.logout)
     try:
         identity = principal(st.user, settings.get("issuer"))
-        store = TeacherStore(settings.get("dsn", ""), identity, settings.get("project_url", ""))
+        store = TeacherStore(settings.get("dsn", ""), identity, settings.get("project_url", ""), settings.get("ssl_root_cert_pem"))
         store.call("authorize")
     except (PermissionError, RuntimeError) as error:
         st.error(str(error))

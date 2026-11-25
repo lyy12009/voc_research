@@ -1,7 +1,9 @@
 """Server-side teacher identity, repository and publication boundary."""
 import json
 import re
-from contextlib import closing
+from contextlib import ExitStack, closing
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from core import TEXT_PARTS, unique_words
 
@@ -33,10 +35,11 @@ class PublicationConflict(RuntimeError):
 
 
 class TeacherStore:
-    def __init__(self, dsn, identity, project_url):
+    def __init__(self, dsn, identity, project_url, ssl_root_cert_pem=None):
         self.dsn = dsn
         self.identity = identity
         self.project_url = project_url
+        self.ssl_root_cert_pem = ssl_root_cert_pem
 
     def call(self, action, payload=None):
         return self._query("select vocab_teacher.request(%s, %s, %s, %s)", (action,), payload)
@@ -58,7 +61,16 @@ class TeacherStore:
         try:
             settings = conninfo_to_dict(self.dsn)
             verify_pooler(settings, self.project_url)
-            with closing(psycopg.connect(self.dsn, connect_timeout=5)) as connection:
+            with ExitStack() as stack:
+                options = {"connect_timeout": 5}
+                if self.ssl_root_cert_pem:
+                    if not isinstance(self.ssl_root_cert_pem, str) or not self.ssl_root_cert_pem.lstrip().startswith("-----BEGIN CERTIFICATE-----"):
+                        raise ValueError("Invalid CA")
+                    directory = stack.enter_context(TemporaryDirectory(prefix="vocab-ca-"))
+                    certificate = Path(directory) / "supabase-ca.pem"
+                    certificate.write_text(self.ssl_root_cert_pem, encoding="ascii")
+                    options["sslrootcert"] = str(certificate)
+                connection = stack.enter_context(closing(psycopg.connect(self.dsn, **options)))
                 with connection.transaction():
                     return connection.execute(
                         statement, (*self.identity, *arguments, Jsonb(payload or {})),

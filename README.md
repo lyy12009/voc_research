@@ -37,6 +37,7 @@ server_metadata_url = "<oidc-discovery-url>"
 [teacher]
 issuer = "<exact-oidc-issuer>"
 dsn = "<restricted postgres DSN with sslmode=verify-full>"
+ssl_root_cert_pem = "<Supabase public CA PEM, when not provided through an existing sslrootcert path>"
 test_branch = "codex/vocab-cloud-test-synthetic"
 project_url = "https://<isolated-project-ref>.supabase.co"
 publishable_key = "<isolated-project-publishable-key>"
@@ -67,3 +68,4 @@ npm run test:study
 ```
 
 `npm run synthetic` 以固定種子 20261125 建立合成 PostgreSQL 資料並核對筆數。每次啟動都在獨立 PGlite 記憶體 DB 重新產生，流程結束自動銷毀，不需要連線字串，也沒有清除正式資料的指令。`npm run test:study` 重新產生同一資料集，經授權 SQL 對帳、操作五個 Streamlit 研究頁面、讀回 CSV 與 Excel 比較。大量歷史日期以測試專用種入，真實作答送出、斷線重送和首次延宕鎖定由小型 RPC 及 Chrome 測試另外驗證。
+[隔離雲端整合驗收紀錄](CLOUD_ACCEPTANCE.md)
