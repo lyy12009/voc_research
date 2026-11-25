@@ -1,0 +1,32 @@
+{
+  "schema": "vocab-research-1",
+  "id": "IT_GITHUB_CLOUD",
+  "version": "v1",
+  "title": "Synthetic acceptance fixture",
+  "book": "fixture",
+  "lesson": "fixture",
+  "appVersion": "0.3.11",
+  "backendProtocol": "supabase-v1",
+  "quizMode": "practice",
+  "availableAt": null,
+  "clozeGrading": "server",
+  "availableLanguages": [
+    "en"
+  ],
+  "words": [
+    {
+      "id": "W33E3580C09",
+      "word": "甲",
+      "pinyin": "",
+      "meaning": "",
+      "meanings": {
+        "en": "alpha",
+        "vi": "",
+        "id": ""
+      },
+      "sentence": "這是＿＿。",
+      "category": "textbook",
+      "source": ""
+    }
+  ]
+}
