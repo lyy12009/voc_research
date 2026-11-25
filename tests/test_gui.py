@@ -191,6 +191,17 @@ class TeacherTests(unittest.TestCase):
             self.assertTrue(app.get("download_button"))
             self.assertFalse(app.get("link_button"))
 
+    def test_oidc_enrollment_shows_subject_only_to_exact_verified_test_account(self):
+        from cloud_teacher import enrollment_subject
+        identity = ("https://accounts.google.com", "12345")
+        claims = {"email": "teacher@example.test", "email_verified": True}
+        config = {"enrollment_email": claims["email"], "project_url": "https://pcqzkpuxolmfvcfvwxyg.supabase.co"}
+        self.assertEqual(enrollment_subject(claims, identity, config), "12345")
+        self.assertIsNone(enrollment_subject(claims | {"email_verified": False}, identity, config))
+        self.assertIsNone(enrollment_subject(claims | {"email": "other@example.test"}, identity, config))
+        self.assertIsNone(enrollment_subject(claims, identity, config | {"project_url": "https://another.supabase.co"}))
+        self.assertIsNone(enrollment_subject(claims, identity, config | {"dsn": "configured"}))
+
     def test_input_boundaries(self):
         with self.assertRaises(PermissionError):
             principal({"iss":"different", "sub":"teacher"}, "https://issuer.test")

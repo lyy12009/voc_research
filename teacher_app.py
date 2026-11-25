@@ -7,7 +7,7 @@ import streamlit as st
 from streamlit.components.v1 import html
 
 import github_publish
-from cloud_teacher import KEY, PublicationConflict, TeacherStore, new_draft, principal, read_import, validated_publication
+from cloud_teacher import KEY, PublicationConflict, TeacherStore, enrollment_subject, new_draft, principal, read_import, validated_publication
 from core import TEXT_PARTS, accepted_answers, sentence_candidates, validate_and_build
 from preview import preview_html
 from research_metrics import CATEGORIES
@@ -31,6 +31,11 @@ def controls():
     st.sidebar.button("教師登出", on_click=st.logout)
     try:
         identity = principal(st.user, settings.get("issuer"))
+        enrollment = enrollment_subject(st.user, identity, settings)
+        if enrollment:
+            st.info("正在核對測試教師身分。教師權限尚未開通。")
+            st.code(enrollment)
+            st.stop()
         store = TeacherStore(settings.get("dsn", ""), identity, settings.get("project_url", ""), settings.get("ssl_root_cert_pem"))
         store.call("authorize")
     except (PermissionError, RuntimeError) as error:

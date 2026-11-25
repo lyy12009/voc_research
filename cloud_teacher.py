@@ -19,6 +19,17 @@ def principal(claims, expected_issuer):
     raise PermissionError("登入身分不符合教師端設定")
 
 
+def enrollment_subject(claims, identity, settings):
+    """Display enrollment information only to the verified isolated test account."""
+    email = settings.get("enrollment_email")
+    if (settings.get("project_url") == "https://pcqzkpuxolmfvcfvwxyg.supabase.co"
+            and identity[0] == "https://accounts.google.com" and isinstance(email, str) and email
+            and claims.get("email_verified") is True and claims.get("email") == email
+            and not settings.get("dsn")):
+        return identity[1]
+    return None
+
+
 def verify_pooler(settings, project_url):
     match = re.fullmatch(r"https://([a-z0-9-]+)\.supabase\.co/?", project_url)
     if (not match or settings.get("sslmode") != "verify-full"
